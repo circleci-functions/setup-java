@@ -71,7 +71,7 @@ func TestAcceptance_InstallsOntoTheRealPath(t *testing.T) {
 
 	if runtime.GOOS == "windows" {
 		t.Run("ResolvesInPowerShellToo", func(t *testing.T) {
-			got, err := sdktest.LaterStep(t, "powershell.exe", "-Command", "java -version 2>&1 | Out-String")
+			got, err := sdktest.LaterStep(t, "powershell.exe", "-Command", `java -version 2>&1 | ForEach-Object { "$_" }; exit $LASTEXITCODE`)
 			assert.NilError(t, err, "PowerShell could not resolve java: %s", got)
 			assert.Assert(t, strings.Contains(got, `"`+short+`"`), "PowerShell resolved a different java: %s", got)
 		})
