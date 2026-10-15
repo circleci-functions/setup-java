@@ -55,22 +55,37 @@ func TestAcceptance_InstallsOntoTheRealPath(t *testing.T) {
 		"a per-run nonce must miss the cache, so this install downloads for real; got: %s", out)
 
 	version := reported(t, out, `Java (\S+) is the default`)
-	linked := reported(t, out, `linked into (.+)$`)
 	short, _, _ := strings.Cut(version, "+")
-	t.Logf("setup-java installed Java %s and linked it into %s", version, linked)
-	removeLinks(t, linked)
+	linked := find(out, `linked into (.+)$`)
+	shadowed := find(out, `the JDK in (.+) comes first on PATH`)
+	if linked != "" {
+		t.Logf("setup-java installed Java %s and linked it into %s", version, linked)
+		removeLinks(t, linked)
+	} else {
+		assert.Assert(t, runtime.GOOS == "windows" && shadowed != "", "setup-java neither linked java nor reported why: %s", out)
+		t.Logf("setup-java installed Java %s and put it first on PATH in bash, ahead of the JDK in %s", version, shadowed)
+	}
+
+	laterStep := func(t *testing.T, name string, args ...string) (string, error) {
+		t.Helper()
+		if linked != "" {
+			return sdktest.LaterStep(t, name, args...)
+		}
+		return sdktest.LaterStep(t, "sh", append([]string{"-c", `. "$1" && shift && exec "$@"`, "sh", bashEnv, name}, args...)...)
+	}
 
 	t.Run("ResolvesByNameInALaterStep", func(t *testing.T) {
-		got, err := sdktest.LaterStep(t, "java", "-version")
+		got, err := laterStep(t, "java", "-version")
 		assert.NilError(t, err, "a later step could not resolve java: %s", got)
 		assert.Assert(t, strings.Contains(got, `"`+short+`"`), "a later step runs another java: %s", got)
-		got, err = sdktest.LaterStep(t, "javac", "-version")
+		got, err = laterStep(t, "javac", "-version")
 		assert.NilError(t, err, "a later step could not resolve javac: %s", got)
 		assert.Assert(t, strings.Contains(got, "javac "+short), "a later step runs another javac: %s", got)
 	})
 
 	if runtime.GOOS == "windows" {
 		t.Run("ResolvesInPowerShellToo", func(t *testing.T) {
+			skip.If(t, linked == "", "PowerShell does not read $BASH_ENV, so it keeps the JDK in %s", shadowed)
 			got, err := sdktest.LaterStep(t, "powershell.exe", "-Command", `java -version 2>&1 | ForEach-Object { "$_" }; exit $LASTEXITCODE`)
 			assert.NilError(t, err, "PowerShell could not resolve java: %s", got)
 			assert.Assert(t, strings.Contains(got, `"`+short+`"`), "PowerShell resolved a different java: %s", got)
@@ -83,13 +98,24 @@ func TestAcceptance_InstallsOntoTheRealPath(t *testing.T) {
 		assert.Assert(t, strings.Contains(got, `"`+short+`"`), "JAVA_HOME points at another JDK: %s", got)
 	})
 
+	t.Run("LeavesOtherJDKsAlone", func(t *testing.T) {
+		if linked != "" {
+			_, err := os.Stat(filepath.Join(filepath.Dir(linked), "release"))
+			assert.Assert(t, os.IsNotExist(err), "linked into the bin directory of another JDK: %s", linked)
+			return
+		}
+		got, err := sdktest.LaterStep(t, filepath.Join(shadowed, "java"), "-version")
+		assert.NilError(t, err, "the JDK in %s no longer runs: %s", shadowed, got)
+		assert.Assert(t, !strings.Contains(got, `"`+short+`"`), "the java in %s now runs the JDK setup-java installed: %s", shadowed, got)
+	})
+
 	t.Run("RestoresFromTheCacheOnAFreshExecutor", func(t *testing.T) {
 		skip.If(t, !sdk.InCircleCIJob(), "the cache round trip needs a CircleCI job's cache")
 		assert.NilError(t, os.RemoveAll(s.InstallDir))
 		out := run(t)
 		assert.Assert(t, strings.Contains(out, "restored Java "+version+" from cache"),
 			"expected the install saved above to be restored; got: %s", out)
-		got, err := sdktest.LaterStep(t, "java", "-version")
+		got, err := laterStep(t, "java", "-version")
 		assert.NilError(t, err, got)
 		assert.Assert(t, strings.Contains(got, `"`+short+`"`), got)
 	})
@@ -117,12 +143,20 @@ func removeLinks(t *testing.T, dir string) {
 // reported returns the first submatch of pattern in setup-java's output.
 func reported(t *testing.T, out, pattern string) string {
 	t.Helper()
+	if got := find(out, pattern); got != "" {
+		return got
+	}
+	t.Fatalf("setup-java did not report %q:\n%s", pattern, out)
+	return ""
+}
+
+// find returns the first submatch of pattern in out, or "".
+func find(out, pattern string) string {
 	re := regexp.MustCompile(pattern)
 	for line := range strings.SplitSeq(out, "\n") {
 		if m := re.FindStringSubmatch(strings.TrimSpace(line)); m != nil {
 			return m[1]
 		}
 	}
-	t.Fatalf("setup-java did not report %q:\n%s", pattern, out)
 	return ""
 }

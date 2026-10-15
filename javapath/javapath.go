@@ -23,14 +23,34 @@ type Options struct {
 	Path string
 }
 
+// Result describes where Link made the JDK resolvable from.
+type Result struct {
+	// Dir is the directory the JDK tools were linked into, or "" when they
+	// were not linked.
+	Dir string
+	// Shadowed is the directory of another JDK's java that comes first on
+	// PATH, when Link left it alone rather than replace it. The caller puts
+	// the JDK on PATH some other way.
+	Shadowed string
+}
+
 // Link makes java, javac and every other tool in the JDK's bin directory
-// resolvable by name from a directory already on PATH, and returns that
-// directory.
-func Link(opts Options) (string, error) {
+// resolvable by name from a directory already on PATH.
+//
+// On Windows it will not replace another JDK's tools to get ahead of them: a
+// JDK's java.exe cannot be swapped for a shim without breaking that JDK. When
+// no directory comes ahead of it, Link links nothing and reports it in
+// Result.Shadowed.
+func Link(opts Options) (Result, error) {
 	from := filepath.Join(opts.Home, "bin")
 	names, err := Tools(from)
 	if err != nil {
-		return "", err
+		return Result{}, err
+	}
+	if opts.BinDir == "" && runtime.GOOS == "windows" {
+		if dir, ok := takesOver(pathlink.SearchDirs(opts.Path), pathlink.UserBinDirs(), pathlink.Writable); ok {
+			return Result{Shadowed: dir}, nil
+		}
 	}
 	res, err := pathlink.Ensure(pathlink.Options{
 		Names:     names,
@@ -41,9 +61,25 @@ func Link(opts Options) (string, error) {
 		Verify:    verify(opts.Home),
 	})
 	if err != nil {
-		return "", err
+		return Result{}, err
 	}
-	return res.Dir, nil
+	return Result{Dir: res.Dir}, nil
+}
+
+// takesOver returns the directory of the java already on PATH when linking
+// would replace it there, because no directory in preferred comes ahead of
+// it. A java in one of preferred is a link from an earlier run, safe to
+// replace.
+func takesOver(dirs, preferred []string, writable func(string) bool) (string, bool) {
+	existing := pathlink.IndexOf(dirs, "java")
+	if existing < 0 {
+		return "", false
+	}
+	dir, _ := pathlink.ChooseDir(dirs, existing, preferred, writable)
+	if dir != dirs[existing] || slices.ContainsFunc(preferred, func(p string) bool { return sameDir(p, dir) }) {
+		return "", false
+	}
+	return dir, true
 }
 
 // Tools returns the names of the executables in dir, java first, without the
@@ -136,6 +172,30 @@ func HomeVar(major int, arch string) string {
 	return fmt.Sprintf("JAVA_HOME_%d_%s", major, strings.ToUpper(arch))
 }
 
+// PrependPath puts dir first on PATH in later steps, through $BASH_ENV, so
+// only steps that run in bash see it. On Windows the path is written as Git
+// Bash spells it, /c/Users/..., since PATH there is colon-separated.
+func PrependPath(dir string) error {
+	if os.Getenv("BASH_ENV") == "" {
+		return errors.New("BASH_ENV is not set, so PATH cannot be changed for later steps")
+	}
+	return bashenv.ExportEnvVars(map[string]string{"PATH": shellQuote(unixPath(dir)) + `:"$PATH"`})
+}
+
+// unixPath turns a Windows path like C:\Users\x into /c/Users/x. Other paths
+// come back with forward slashes and are otherwise unchanged.
+func unixPath(p string) string {
+	p = strings.ReplaceAll(p, `\`, "/")
+	if len(p) >= 2 && p[1] == ':' {
+		return "/" + strings.ToLower(p[:1]) + p[2:]
+	}
+	return p
+}
+
+func shellQuote(v string) string {
+	return "'" + strings.ReplaceAll(v, "'", `'\''`) + "'"
+}
+
 // Export appends vars to $BASH_ENV for later steps. Values are quoted for the
 // shell, and on Windows written with forward slashes, which both Git Bash and
 // the JDK read as a Windows path.
@@ -148,7 +208,7 @@ func Export(vars map[string]string) error {
 		if runtime.GOOS == "windows" {
 			v = filepath.ToSlash(v)
 		}
-		quoted[k] = "'" + strings.ReplaceAll(v, "'", `'\''`) + "'"
+		quoted[k] = shellQuote(v)
 	}
 	return bashenv.ExportEnvVars(quoted)
 }

@@ -71,16 +71,35 @@ func (c *installCmd) Run(ctx context.Context, client *sdk.Client) error {
 	}
 	if c.MakeDefaultJdk {
 		def := jdks[len(jdks)-1]
-		dir, err := javapath.Link(javapath.Options{Home: def.home, BinDir: c.BinDir})
-		if err != nil {
-			return fmt.Errorf("put Java %s on PATH: %w", def.label, err)
+		if err := c.makeDefault(def); err != nil {
+			return err
 		}
-		fmt.Fprintf(os.Stderr, "setup-java: Java %s is the default: java, javac and the other JDK tools are linked into %s\n", def.label, dir)
 		vars["JAVA_HOME"] = def.home
 	} else {
 		fmt.Fprintf(os.Stderr, "setup-java: --make-default-jdk=false, so java and JAVA_HOME are left as they were\n")
 	}
 	export(vars)
+	return nil
+}
+
+// makeDefault puts j's tools on PATH: linked into a directory already on it,
+// or, where that would mean replacing another JDK's tools, first on PATH in
+// later bash steps.
+func (c *installCmd) makeDefault(j jdk) error {
+	res, err := javapath.Link(javapath.Options{Home: j.home, BinDir: c.BinDir})
+	if err != nil {
+		return fmt.Errorf("put Java %s on PATH: %w", j.label, err)
+	}
+	if res.Shadowed == "" {
+		fmt.Fprintf(os.Stderr, "setup-java: Java %s is the default: java, javac and the other JDK tools are linked into %s\n", j.label, res.Dir)
+		return nil
+	}
+	bin := filepath.Join(j.home, "bin")
+	if err := javapath.PrependPath(bin); err != nil {
+		return fmt.Errorf("put Java %s on PATH: %w", j.label, err)
+	}
+	fmt.Fprintf(os.Stderr, "setup-java: Java %s is the default in later bash steps, with %s first on PATH there\n", j.label, bin)
+	fmt.Fprintf(os.Stderr, "setup-java: warning: the JDK in %s comes first on PATH and is left as it is, so java outside bash still runs that one\n", res.Shadowed)
 	return nil
 }
 

@@ -65,9 +65,9 @@ func TestLink(t *testing.T) {
 	home := fakeJDK(t)
 	binDir := t.TempDir()
 
-	dir, err := javapath.Link(javapath.Options{Home: home, BinDir: binDir})
+	res, err := javapath.Link(javapath.Options{Home: home, BinDir: binDir})
 	assert.NilError(t, err)
-	assert.Equal(t, dir, binDir)
+	assert.Equal(t, res, javapath.Result{Dir: binDir})
 	for _, name := range []string{"java", "javac", "jar"} {
 		target, err := os.Readlink(filepath.Join(binDir, name))
 		assert.NilError(t, err, name)
@@ -96,10 +96,24 @@ func TestExport(t *testing.T) {
 	assert.Equal(t, string(out), home, "a later step reads the value back unchanged")
 }
 
+func TestPrependPath(t *testing.T) {
+	skip.If(t, runtime.GOOS == "windows", "checked with /bin/sh")
+	bashEnv := filepath.Join(t.TempDir(), "bash_env")
+	t.Setenv("BASH_ENV", bashEnv)
+
+	dir := "/opt/jdk's home/bin"
+	assert.NilError(t, javapath.PrependPath(dir))
+
+	out, err := exec.Command("sh", "-c", `PATH=/usr/bin:/bin; . "$1"; printf %s "$PATH"`, "sh", bashEnv).Output()
+	assert.NilError(t, err)
+	assert.Equal(t, string(out), dir+":/usr/bin:/bin")
+}
+
 func TestExport_NoBashEnv(t *testing.T) {
 	t.Setenv("BASH_ENV", "")
 	err := javapath.Export(map[string]string{"JAVA_HOME": "/opt/jdk"})
 	assert.ErrorContains(t, err, "BASH_ENV is not set")
+	assert.ErrorContains(t, javapath.PrependPath("/opt/jdk/bin"), "BASH_ENV is not set")
 }
 
 func realPath(t *testing.T, p string) string {

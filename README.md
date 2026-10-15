@@ -36,7 +36,8 @@ run on the machine fails this step rather than a later one.
 
 It links `java`, `javac` and every other tool in the JDK's `bin` directory into
 a directory already on `PATH`, ahead of any JDK the image ships. Later steps
-run them by name, in any shell, without sourcing anything.
+run them by name, in any shell, without sourcing anything. On Windows there is
+one exception, [below](#when-another-jdk-comes-first-on-windows).
 
 ### Choosing a distribution
 
@@ -119,6 +120,14 @@ other shells, such as `sh` on Alpine or PowerShell on Windows, still find
 
 On Windows the paths are written with forward slashes (`C:/Users/...`), which
 Git Bash and the JDK both read.
+
+### When another JDK comes first on Windows
+
+On Windows, setup-java never replaces another JDK's `java.exe` to get ahead of
+it, since that would break that JDK. If a JDK the image ships comes first on
+`PATH` and no directory setup-java can use comes before it, setup-java puts its
+own JDK first on `PATH` through `$BASH_ENV` instead, and says so. Bash steps
+then run the new JDK. PowerShell and cmd steps still run the image's.
 
 ### Caching the install
 
