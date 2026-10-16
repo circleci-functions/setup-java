@@ -11,13 +11,13 @@ import (
 
 	"gotest.tools/v3/assert"
 
-	"github.com/circleci-functions/setup-java/internal/testing/fakeadoptium"
+	"github.com/circleci-functions/setup-java/internal/testing/fakejdk"
 	"github.com/circleci-functions/setup-java/javadist"
 )
 
 func TestInstall(t *testing.T) {
-	b := fakeadoptium.Build{Version: ver(21, 6, 7)}
-	srv := fakeadoptium.New(t, b)
+	b := fakejdk.Build{Version: ver(21, 6, 7)}
+	srv := fakejdk.New(t, b)
 	r, err := resolve(t, srv, "21", host(t), "jdk")
 	assert.NilError(t, err)
 
@@ -34,7 +34,7 @@ func TestInstall(t *testing.T) {
 }
 
 func TestInstall_ChecksumMismatch(t *testing.T) {
-	srv := fakeadoptium.New(t, fakeadoptium.Build{Version: ver(21, 6, 7)})
+	srv := fakejdk.New(t, fakejdk.Build{Version: ver(21, 6, 7)})
 	r, err := resolve(t, srv, "21", host(t), "jdk")
 	assert.NilError(t, err)
 	srv.Corrupt()
@@ -46,7 +46,7 @@ func TestInstall_ChecksumMismatch(t *testing.T) {
 }
 
 func TestInstall_NoChecksum(t *testing.T) {
-	srv := fakeadoptium.New(t, fakeadoptium.Build{Version: ver(21, 6, 7)})
+	srv := fakejdk.New(t, fakejdk.Build{Version: ver(21, 6, 7)})
 	r, err := resolve(t, srv, "21", host(t), "jdk")
 	assert.NilError(t, err)
 	srv.Corrupt()

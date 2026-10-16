@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strconv"
-	"time"
 
 	hc "github.com/circleci-functions/toolkit/httpcl"
 
@@ -62,8 +60,10 @@ func (a adoptiumAsset) version() javaversion.Version {
 	}
 }
 
+func (Temurin) EarlyAccess() bool { return true }
+
 func (t Temurin) Resolve(ctx context.Context, spec javaversion.Spec, p Platform, pkg string) (Release, error) {
-	client := hc.New(ctx, hc.Config{Name: "adoptium", BaseURL: t.BaseURL, Timeout: 2 * time.Minute})
+	client := newClient(ctx, "adoptium", t.BaseURL)
 	rng, err := t.versionRange(ctx, client, spec)
 	if err != nil {
 		return Release{}, err
@@ -73,22 +73,19 @@ func (t Temurin) Resolve(ctx context.Context, spec javaversion.Spec, p Platform,
 		return Release{}, err
 	}
 
-	byVersion := map[string]adoptiumAsset{}
-	versions := make([]javaversion.Version, 0, len(assets))
+	builds := make([]Release, 0, len(assets))
 	for _, a := range assets {
 		if len(a.Binaries) == 0 {
 			continue
 		}
-		v := a.version()
-		byVersion[v.String()] = a
-		versions = append(versions, v)
+		bin := a.Binaries[0].Package
+		builds = append(builds, Release{Version: a.version(), URL: bin.Link, SHA256: bin.Checksum})
 	}
-	v, err := spec.Resolve(versions)
+	r, err := pick(spec, builds)
 	if err != nil {
 		return Release{}, fmt.Errorf("%w in Temurin's %s builds for %s", err, pkg, p)
 	}
-	bin := byVersion[v.String()].Binaries[0].Package
-	return Release{Version: v, URL: bin.Link, SHA256: bin.Checksum}, nil
+	return r, nil
 }
 
 // versionRange returns the Adoptium version range to list: one major when
@@ -97,18 +94,32 @@ func (t Temurin) Resolve(ctx context.Context, spec javaversion.Spec, p Platform,
 func (t Temurin) versionRange(ctx context.Context, client *hc.Client, spec javaversion.Spec) (string, error) {
 	major, ok := spec.Major()
 	if !ok && spec.Latest() {
-		var info struct {
-			MostRecentFeatureRelease int `json:"most_recent_feature_release"`
+		latest, err := latestFeatureRelease(ctx, client)
+		if err != nil {
+			return "", err
 		}
-		if err := client.Call(ctx, hc.NewRequest(http.MethodGet, "/v3/info/available_releases", hc.JSONDecoder(&info))); err != nil {
-			return "", fmt.Errorf("look up the latest Temurin release: %w", err)
-		}
-		major, ok = info.MostRecentFeatureRelease, info.MostRecentFeatureRelease > 0
+		major, ok = latest, true
 	}
 	if !ok {
 		return "[1.0,100.0]", nil
 	}
 	return fmt.Sprintf("[%d,%d)", major, major+1), nil
+}
+
+// latestFeatureRelease asks the Adoptium API at client for the newest Java
+// major released.
+func latestFeatureRelease(ctx context.Context, client *hc.Client) (int, error) {
+	var info struct {
+		MostRecentFeatureRelease int `json:"most_recent_feature_release"`
+	}
+	found, err := getJSON(ctx, client, "/v3/info/available_releases", nil, &info)
+	if err != nil {
+		return 0, fmt.Errorf("look up the latest Java release: %w", err)
+	}
+	if !found || info.MostRecentFeatureRelease <= 0 {
+		return 0, errors.New("look up the latest Java release: Adoptium reported none")
+	}
+	return info.MostRecentFeatureRelease, nil
 }
 
 // assets lists the builds in rng for p, newest first, a page at a time until
@@ -136,16 +147,12 @@ func (t Temurin) assets(ctx context.Context, client *hc.Client, rng string, ea b
 	for page := range adoptiumMaxPages {
 		params["page"] = strconv.Itoa(page)
 		var batch []adoptiumAsset
-		err := client.Call(ctx, hc.NewRequest(http.MethodGet, "/v3/assets/version/%s",
-			hc.RouteParams(url.PathEscape(rng)),
-			hc.QueryParams(params),
-			hc.JSONDecoder(&batch),
-		))
-		if hc.HasStatusCode(err, http.StatusNotFound) {
-			break
-		}
+		found, err := getJSON(ctx, client, "/v3/assets/version/"+url.PathEscape(rng), params, &batch)
 		if err != nil {
 			return nil, fmt.Errorf("list Temurin builds: %w", err)
+		}
+		if !found {
+			break
 		}
 		all = append(all, batch...)
 		if len(batch) < adoptiumPageSize {
@@ -156,14 +163,6 @@ func (t Temurin) assets(ctx context.Context, client *hc.Client, rng string, ea b
 		return nil, errors.New(noBuilds("Temurin", pkg, p, ea))
 	}
 	return all, nil
-}
-
-func noBuilds(vendor, pkg string, p Platform, ea bool) string {
-	kind := "releases"
-	if ea {
-		kind = "early-access builds"
-	}
-	return fmt.Sprintf("%s publishes no %s %s for %s", vendor, pkg, kind, p)
 }
 
 func adoptiumOS(p Platform) string {

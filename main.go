@@ -6,11 +6,14 @@ package main
 
 import (
 	"context"
+	"strings"
 
 	"github.com/alecthomas/kong"
 
 	"github.com/circleci-functions/toolkit/functionyaml"
 	"github.com/circleci-functions/toolkit/sdk"
+
+	"github.com/circleci-functions/setup-java/javadist"
 )
 
 type cli struct {
@@ -27,6 +30,10 @@ func run(ctx context.Context, client *sdk.Client) error {
 		kong.Name("setup-java"),
 		kong.Description("Install a Java Development Kit, caching the download."),
 		kong.UsageOnError(),
+		kong.Vars{
+			"distributions":     strings.Join(javadist.Names(), ","),
+			"distribution_list": strings.Join(javadist.Names(), ", "),
+		},
 		functionyaml.Embed(),
 	)
 	kCtx.BindTo(ctx, (*context.Context)(nil))

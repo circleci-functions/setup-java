@@ -5,9 +5,11 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/circleci-functions/toolkit/sdk"
@@ -24,8 +26,8 @@ const jdkFileDistribution = "jdkfile"
 type installCmd struct {
 	JavaVersion     []string `help:"Java version to install: a major (21), a full version (21.0.5 or 21.0.5+11), a semver range (>=17 <22), or latest. Add -ea for an early-access build (26-ea). Separate several with commas to install each; the last becomes the default." example:"21"`
 	JavaVersionFile string   `help:"File to read the Java version from: .java-version, .tool-versions or .sdkmanrc. When --java-version is set too, the two must ask for the same version." type:"path"`
-	Distribution    string   `help:"Java distribution to install: temurin (Eclipse Temurin), or jdkfile to install the archive given by --jdk-file." enum:"temurin,jdkfile" required:"" example:"temurin"`
-	JavaPackage     string   `help:"Package type to install: jdk or jre." default:"jdk"`
+	Distribution    string   `help:"Java distribution to install: ${distribution_list}, or jdkfile to install the archive given by --jdk-file." enum:"${distributions},jdkfile" required:"" example:"temurin"`
+	JavaPackage     string   `help:"Package type to install: jdk or jre, or for some distributions a variant such as jdk+fx." default:"jdk"`
 	Architecture    string   `help:"Architecture to install for: x64, x86, aarch64, armv7, ppc64le, ppc64, riscv64 or s390x (amd64 and arm64 work too). Defaults to the machine's."`
 	JdkFile         string   `help:"JDK archive to install (.tar.gz, .tgz or .zip), with --distribution jdkfile." type:"path"`
 	MakeDefaultJdk  bool     `help:"Make this JDK the one java, javac and JAVA_HOME resolve to. Set to false to install it only for build-tool toolchains, which find it through JAVA_HOME_<major>_<ARCH>." default:"true"`
@@ -33,13 +35,16 @@ type installCmd struct {
 	InstallDir      string   `help:"Directory to install JDKs under." default:"~/.cache/setup-java" hidden:""`
 	BinDir          string   `help:"Link the JDK tools into this directory instead of discovering one on PATH." type:"path" hidden:""`
 	CacheNonce      string   `help:"Partition the JDK cache, so a test run cannot restore an earlier run's install." hidden:""`
-	TemurinURL      string   `help:"Adoptium API to look up Temurin builds in." default:"https://api.adoptium.net" hidden:""`
+	APIURL          string   `name:"api-url" help:"Look builds up under this URL instead of the distribution's own." hidden:""`
 }
 
 type jdk struct {
 	label string
 	major int
 	home  string
+	// env holds the variables, beyond JAVA_HOME, the JDK needs when it is the
+	// default.
+	env map[string]string
 }
 
 func (c *installCmd) Run(ctx context.Context, client *sdk.Client) error {
@@ -75,6 +80,7 @@ func (c *installCmd) Run(ctx context.Context, client *sdk.Client) error {
 			return err
 		}
 		vars["JAVA_HOME"] = def.home
+		maps.Copy(vars, def.env)
 	} else {
 		fmt.Fprintf(os.Stderr, "setup-java: --make-default-jdk=false, so java and JAVA_HOME are left as they were\n")
 	}
@@ -160,7 +166,13 @@ func (c *installCmd) checkDistribution(specs []javaversion.Spec) error {
 		if c.JdkFile != "" {
 			return errors.New("--jdk-file needs --distribution jdkfile")
 		}
-		return javadist.CheckPackage(c.distribution(), c.JavaPackage)
+		dist := c.distribution()
+		for _, spec := range specs {
+			if err := javadist.CheckSpec(dist, spec); err != nil {
+				return err
+			}
+		}
+		return javadist.CheckPackage(dist, c.JavaPackage)
 	}
 	switch {
 	case c.JdkFile == "":
@@ -173,8 +185,11 @@ func (c *installCmd) checkDistribution(specs []javaversion.Spec) error {
 	return nil
 }
 
+// distribution returns the --distribution to install from. kong has already
+// checked the name is one of javadist.Names.
 func (c *installCmd) distribution() javadist.Distribution {
-	return javadist.Temurin{BaseURL: c.TemurinURL}
+	d, _ := javadist.New(c.Distribution, c.APIURL)
+	return d
 }
 
 func (c *installCmd) install(ctx context.Context, client *sdk.Client, spec javaversion.Spec, platform javadist.Platform, installDir string) (jdk, error) {
@@ -210,6 +225,10 @@ func (c *installCmd) installRelease(ctx context.Context, client *sdk.Client, spe
 			return err
 		}
 		release = r
+		if r.Floating {
+			fmt.Fprintf(os.Stderr, "setup-java: resolved %q to the newest %s build of Java %d (%s)\n", spec, dist.Name(), r.Version.Major, platform)
+			return nil
+		}
 		fmt.Fprintf(os.Stderr, "setup-java: resolved %q to %s %s (%s)\n", spec, dist.Name(), r.Version, platform)
 		return nil
 	}
@@ -220,25 +239,35 @@ func (c *installCmd) installRelease(ctx context.Context, client *sdk.Client, spe
 		}
 		version = release.Version
 	}
-	root := filepath.Join(installDir, c.installName(version.DirName(), platform))
-	j := jdk{label: version.String(), major: version.Major}
-	key := c.cacheKey(version.DirName(), platform, root)
-	if c.restore(ctx, client, key, version.String(), root) {
-		j.home = javadist.Home(root)
-		return j, nil
+	id, label := version.DirName(), version.String()
+	if release.Floating {
+		id, label = fmt.Sprintf("%d-%s", version.Major, release.SHA256[:12]), strconv.Itoa(version.Major)
 	}
-	if exact {
-		if err := resolve(); err != nil {
+	root := filepath.Join(installDir, c.installName(id, platform))
+	j := jdk{label: label, major: version.Major}
+	key := c.cacheKey(id, platform, root)
+	if !c.restore(ctx, client, key, j.label, root) {
+		if exact {
+			if err := resolve(); err != nil {
+				return jdk{}, err
+			}
+		}
+		if err := javadist.Install(ctx, release, root); err != nil {
 			return jdk{}, err
 		}
-	}
-	if err := javadist.Install(ctx, release, root); err != nil {
-		return jdk{}, err
-	}
-	if c.Cache {
-		sdk.LogCacheErr("save", client.SaveCache(ctx, key, []string{root}, sdk.WithStepName("Saving Java "+version.String())))
+		if c.Cache {
+			sdk.LogCacheErr("save", client.SaveCache(ctx, key, []string{root}, sdk.WithStepName("Saving Java "+j.label)))
+		}
 	}
 	j.home = javadist.Home(root)
+	j.env = javadist.Env(dist, j.home)
+	if release.Floating {
+		v, err := javadist.ReleaseVersion(j.home)
+		if err != nil {
+			return jdk{}, err
+		}
+		j.label = v.String()
+	}
 	return j, nil
 }
 

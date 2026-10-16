@@ -9,7 +9,7 @@ import (
 
 	"gotest.tools/v3/assert"
 
-	"github.com/circleci-functions/setup-java/internal/testing/fakeadoptium"
+	"github.com/circleci-functions/setup-java/internal/testing/fakejdk"
 	"github.com/circleci-functions/setup-java/javadist"
 	"github.com/circleci-functions/setup-java/javaversion"
 )
@@ -25,7 +25,7 @@ func host(t *testing.T) javadist.Platform {
 	return p
 }
 
-func resolve(t *testing.T, srv *fakeadoptium.Server, raw string, p javadist.Platform, pkg string) (javadist.Release, error) {
+func resolve(t *testing.T, srv *fakejdk.Server, raw string, p javadist.Platform, pkg string) (javadist.Release, error) {
 	t.Helper()
 	spec, err := javaversion.Parse(raw)
 	assert.NilError(t, err)
@@ -35,15 +35,15 @@ func resolve(t *testing.T, srv *fakeadoptium.Server, raw string, p javadist.Plat
 func TestTemurin_Resolve(t *testing.T) {
 	musl := javadist.Platform{OS: "linux", Arch: "x64", Libc: "musl"}
 	arm := javadist.Platform{OS: "linux", Arch: "armv7", Libc: "glibc"}
-	srv := fakeadoptium.New(t,
-		fakeadoptium.Build{Version: ver(17, 14, 7)},
-		fakeadoptium.Build{Version: ver(21, 5, 11)},
-		fakeadoptium.Build{Version: ver(21, 6, 7)},
-		fakeadoptium.Build{Version: ver(21, 6, 7), Package: "jre"},
-		fakeadoptium.Build{Version: ver(25, 1, 8)},
-		fakeadoptium.Build{Version: javaversion.Version{Major: 28, Build: 19, EA: true}},
-		fakeadoptium.Build{Version: ver(21, 4, 7), Platform: musl},
-		fakeadoptium.Build{Version: ver(17, 1, 12), Platform: arm},
+	srv := fakejdk.New(t,
+		fakejdk.Build{Version: ver(17, 14, 7)},
+		fakejdk.Build{Version: ver(21, 5, 11)},
+		fakejdk.Build{Version: ver(21, 6, 7)},
+		fakejdk.Build{Version: ver(21, 6, 7), Package: "jre"},
+		fakejdk.Build{Version: ver(25, 1, 8)},
+		fakejdk.Build{Version: javaversion.Version{Major: 28, Build: 19, EA: true}},
+		fakejdk.Build{Version: ver(21, 4, 7), Platform: musl},
+		fakejdk.Build{Version: ver(17, 1, 12), Platform: arm},
 	)
 	tests := []struct {
 		name     string
@@ -81,7 +81,7 @@ func TestTemurin_Resolve(t *testing.T) {
 }
 
 func TestTemurin_Resolve_QueriesOneMajor(t *testing.T) {
-	srv := fakeadoptium.New(t, fakeadoptium.Build{Version: ver(21, 6, 7)})
+	srv := fakejdk.New(t, fakejdk.Build{Version: ver(21, 6, 7)})
 	_, err := resolve(t, srv, "21", host(t), "jdk")
 	assert.NilError(t, err)
 
@@ -95,11 +95,11 @@ func TestTemurin_Resolve_QueriesOneMajor(t *testing.T) {
 }
 
 func TestTemurin_Resolve_Pages(t *testing.T) {
-	var builds []fakeadoptium.Build
+	var builds []fakejdk.Build
 	for i := 1; i <= 45; i++ {
-		builds = append(builds, fakeadoptium.Build{Version: ver(17, i, 1)})
+		builds = append(builds, fakejdk.Build{Version: ver(17, i, 1)})
 	}
-	srv := fakeadoptium.New(t, builds...)
+	srv := fakejdk.New(t, builds...)
 
 	r, err := resolve(t, srv, "17.0.1", host(t), "jdk")
 	assert.NilError(t, err, "the oldest build is on the third page")
@@ -108,7 +108,7 @@ func TestTemurin_Resolve_Pages(t *testing.T) {
 }
 
 func TestTemurin_Resolve_Errors(t *testing.T) {
-	srv := fakeadoptium.New(t, fakeadoptium.Build{Version: ver(21, 6, 7)})
+	srv := fakejdk.New(t, fakejdk.Build{Version: ver(21, 6, 7)})
 	tests := []struct {
 		name string
 		spec string
