@@ -13,7 +13,7 @@ import (
 
 	"github.com/circleci-functions/toolkit/sdk/sdktest"
 
-	"github.com/circleci-functions/setup-java/internal/testing/fakeadoptium"
+	"github.com/circleci-functions/setup-java/internal/testing/fakejdk"
 	"github.com/circleci-functions/setup-java/javadist"
 	"github.com/circleci-functions/setup-java/javapath"
 	"github.com/circleci-functions/setup-java/javaversion"
@@ -23,7 +23,7 @@ func ver(major, security, build int) javaversion.Version {
 	return javaversion.Version{Major: major, Security: security, Build: build}
 }
 
-var builds = []fakeadoptium.Build{
+var builds = []fakejdk.Build{
 	{Version: ver(17, 14, 7)},
 	{Version: ver(21, 5, 11)},
 	{Version: ver(21, 6, 7)},
@@ -34,7 +34,7 @@ var builds = []fakeadoptium.Build{
 
 // fixture is a fake Adoptium API and the sandbox to install from it into.
 type fixture struct {
-	srv    *fakeadoptium.Server
+	srv    *fakejdk.Server
 	s      *sdktest.Sandbox
 	run    runFunc
 	binDir string
@@ -45,13 +45,13 @@ func newFixture(t *testing.T) fixture {
 	t.Helper()
 	skip.If(t, runtime.GOOS == "windows", "the fake JDKs' tools are shell scripts")
 	s, run := sandbox(t)
-	return fixture{srv: fakeadoptium.New(t, builds...), s: s, run: run, binDir: t.TempDir()}
+	return fixture{srv: fakejdk.New(t, builds...), s: s, run: run, binDir: t.TempDir()}
 }
 
 // install runs the binary with the flags that point it at the fixture.
 func (f fixture) install(t *testing.T, args ...string) (string, error) {
 	t.Helper()
-	args = append(args, "--temurin-url", f.srv.URL, "--install-dir", f.s.InstallDir, "--bin-dir", f.binDir)
+	args = append(args, "--api-url", f.srv.URL, "--install-dir", f.s.InstallDir, "--bin-dir", f.binDir)
 	return f.run(t, nil, args...)
 }
 
@@ -187,7 +187,7 @@ func TestCLI_Install_ChecksumMismatch(t *testing.T) {
 func TestCLI_Install_JdkFile(t *testing.T) {
 	host, err := javadist.Host("")
 	assert.NilError(t, err)
-	archive := writeFile(t, "jdk.tar.gz", string(fakeadoptium.Archive(fakeadoptium.Build{
+	archive := writeFile(t, "jdk.tar.gz", string(fakejdk.Archive(fakejdk.Build{
 		Version: ver(21, 5, 11), Package: "jdk", Platform: host,
 	})))
 

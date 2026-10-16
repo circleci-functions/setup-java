@@ -11,7 +11,7 @@ import (
 	"gotest.tools/v3/assert"
 	"gotest.tools/v3/skip"
 
-	"github.com/circleci-functions/setup-java/internal/testing/fakeadoptium"
+	"github.com/circleci-functions/setup-java/internal/testing/fakejdk"
 	"github.com/circleci-functions/setup-java/javapath"
 	"github.com/circleci-functions/setup-java/javaversion"
 )
@@ -24,7 +24,7 @@ func fakeJDK(t *testing.T) string {
 	home := t.TempDir()
 	bin := filepath.Join(home, "bin")
 	assert.NilError(t, os.MkdirAll(bin, 0750))
-	java := fakeadoptium.JavaScript(javaversion.Version{Major: 21, Security: 5, Build: 11})
+	java := fakejdk.JavaScript(javaversion.Version{Major: 21, Security: 5, Build: 11})
 	//nolint:gosec // test scripts must be executable
 	assert.NilError(t, os.WriteFile(filepath.Join(bin, "java"), []byte(java), 0700))
 	for _, name := range []string{"javac", "jar"} {

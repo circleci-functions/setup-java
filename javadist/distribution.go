@@ -2,9 +2,14 @@ package javadist
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
+	"time"
+
+	hc "github.com/circleci-functions/toolkit/httpcl"
 
 	"github.com/circleci-functions/setup-java/javaversion"
 )
@@ -28,9 +33,67 @@ type Distribution interface {
 	Resolve(ctx context.Context, spec javaversion.Spec, p Platform, pkg string) (Release, error)
 }
 
+// earlyAccess is implemented by a distribution that installs early-access
+// builds.
+type earlyAccess interface {
+	EarlyAccess() bool
+}
+
 func CheckPackage(d Distribution, pkg string) error {
 	if slices.Contains(d.Packages(), pkg) {
 		return nil
 	}
 	return fmt.Errorf("%s does not publish a %q package: use one of %s", d.Name(), pkg, strings.Join(d.Packages(), ", "))
+}
+
+// CheckSpec returns an error when d cannot install what spec asks for at all,
+// before anything is looked up.
+func CheckSpec(d Distribution, spec javaversion.Spec) error {
+	if ea, ok := d.(earlyAccess); spec.EA() && (!ok || !ea.EarlyAccess()) {
+		return fmt.Errorf("setup-java installs no early-access builds of %s", d.Name())
+	}
+	return nil
+}
+
+// pick returns the newest of builds that satisfies spec.
+func pick(spec javaversion.Spec, builds []Release) (Release, error) {
+	versions := make([]javaversion.Version, len(builds))
+	for i, b := range builds {
+		versions[i] = b.Version
+	}
+	v, err := spec.Resolve(versions)
+	if err != nil {
+		return Release{}, err
+	}
+	for _, b := range builds {
+		if b.Version == v {
+			return b, nil
+		}
+	}
+	return Release{}, errors.New("unreachable: the resolved version is one of the builds")
+}
+
+func noBuilds(vendor, pkg string, p Platform, ea bool) string {
+	kind := "releases"
+	if ea {
+		kind = "early-access builds"
+	}
+	return fmt.Sprintf("%s publishes no %s %s for %s", vendor, pkg, kind, p)
+}
+
+func newClient(ctx context.Context, name, baseURL string) *hc.Client {
+	return hc.New(ctx, hc.Config{Name: name, BaseURL: baseURL, Timeout: 2 * time.Minute})
+}
+
+// getJSON decodes the JSON at route into out. found is false on a 404.
+func getJSON(ctx context.Context, client *hc.Client, route string, params map[string]string, out any) (found bool, err error) {
+	err = client.Call(ctx, hc.NewRequest(http.MethodGet, "%s",
+		hc.RouteParams(route),
+		hc.QueryParams(params),
+		hc.JSONDecoder(out),
+	))
+	if hc.HasStatusCode(err, http.StatusNotFound) {
+		return false, nil
+	}
+	return err == nil, err
 }
