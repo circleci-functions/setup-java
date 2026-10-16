@@ -41,6 +41,7 @@ type Server struct {
 // request that is not theirs.
 var vendors = []func(s *Server, w http.ResponseWriter, r *http.Request) bool{
 	serveAdoptium,
+	serveAzul,
 }
 
 // New starts a server listing builds, and stops it when t ends.

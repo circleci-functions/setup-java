@@ -9,6 +9,7 @@ import (
 // base URL to look builds up in, or "" for the vendor's own.
 var distributions = map[string]func(apiURL string) Distribution{
 	"temurin": func(apiURL string) Distribution { return Temurin{BaseURL: cmpOr(apiURL, AdoptiumURL)} },
+	"zulu":    func(apiURL string) Distribution { return Zulu{BaseURL: cmpOr(apiURL, AzulURL)} },
 }
 
 // Names returns the names of the supported distributions, sorted.

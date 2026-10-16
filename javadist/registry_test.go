@@ -32,4 +32,8 @@ func TestCheckSpec(t *testing.T) {
 	temurin, _ := javadist.New("temurin", "")
 	assert.NilError(t, javadist.CheckSpec(temurin, ea))
 	assert.NilError(t, javadist.CheckSpec(temurin, release))
+
+	zulu, _ := javadist.New("zulu", "")
+	assert.ErrorContains(t, javadist.CheckSpec(zulu, ea), "setup-java installs no early-access builds of zulu")
+	assert.NilError(t, javadist.CheckSpec(zulu, release))
 }

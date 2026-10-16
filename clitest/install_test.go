@@ -214,7 +214,7 @@ func TestCLI_Install_Rejects(t *testing.T) {
 		want string
 	}{
 		{name: "no distribution", args: []string{"--java-version", "21"}, want: "missing flags: --distribution"},
-		{name: "unknown distribution", args: []string{"--distribution", "zulu", "--java-version", "21"}, want: `--distribution must be one of "temurin","jdkfile" but got "zulu"`},
+		{name: "unknown distribution", args: []string{"--distribution", "sapmachine", "--java-version", "21"}, want: `--distribution must be one of`},
 		{name: "no version", args: []string{"--distribution", "temurin"}, want: "one of --java-version or --java-version-file is required"},
 		{name: "bad version", args: []string{"--distribution", "temurin", "--java-version", "twenty-one"}, want: "is not a version, a range or latest"},
 		{
