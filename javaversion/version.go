@@ -13,11 +13,15 @@ import (
 // $UPDATE.$PATCH+$BUILD scheme. Java 8 maps onto it as 8.0.<update>+<build>.
 type Version struct {
 	Major, Minor, Security, Patch, Build int
-	EA                                   bool
+	// Revision is a vendor's own respin of a build, as in Corretto's
+	// 21.0.12.12.1, or 0.
+	Revision int
+	EA       bool
 }
 
 // String returns the version as OpenJDK writes it, e.g. 21.0.5+11,
-// 21.0.12.1+1 or 26-ea+19.
+// 21.0.12.1+1 or 26-ea+19, with any vendor revision after the build:
+// 21.0.12+12.1.
 func (v Version) String() string {
 	var b strings.Builder
 	b.WriteString(v.numbers())
@@ -26,6 +30,9 @@ func (v Version) String() string {
 	}
 	if v.Build > 0 {
 		b.WriteString("+" + strconv.Itoa(v.Build))
+	}
+	if v.Revision > 0 {
+		b.WriteString("." + strconv.Itoa(v.Revision))
 	}
 	return b.String()
 }
@@ -64,6 +71,7 @@ func (v Version) Compare(o Version) int {
 		cmp.Compare(v.Patch, o.Patch),
 		compareBool(!v.EA, !o.EA),
 		cmp.Compare(v.Build, o.Build),
+		cmp.Compare(v.Revision, o.Revision),
 	)
 }
 

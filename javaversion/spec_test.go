@@ -25,6 +25,7 @@ func TestVersion_String(t *testing.T) {
 		{name: "java 8", v: v(8, 504, 0, 1), want: "8.0.504+1"},
 		{name: "early access", v: ea28(19), want: "28-ea+19"},
 		{name: "no build", v: v(21, 5, 0, 0), want: "21.0.5"},
+		{name: "vendor revision", v: Version{Major: 21, Security: 12, Build: 12, Revision: 1}, want: "21.0.12+12.1"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
