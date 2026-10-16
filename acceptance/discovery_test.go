@@ -129,7 +129,7 @@ func TestAcceptance_InstallsOntoTheRealPath(t *testing.T) {
 			t.Run(distribution, func(t *testing.T) {
 				reason := noBuild(t, distribution)
 				skip.If(t, reason != "", reason)
-				out := install(t, distribution, "21")
+				out := install(t, distribution, otherVersion(t, distribution))
 				home := reported(t, out, `installed at (.+)$`)
 				got, err := laterStep(t, "java", "-XshowSettings:properties", "-version")
 				assert.NilError(t, err, "a later step could not run java: %s", got)

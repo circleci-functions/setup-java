@@ -187,7 +187,7 @@ architecture. For musl (Alpine):
 | `temurin` | x64, aarch64 |
 | `zulu` | x64, aarch64, but not the `+fx` packages |
 | `corretto` | x64, aarch64 |
-| `microsoft` | x64 |
+| `microsoft` | x64, Java 11 and 17 only |
 | `oracle-openjdk`, `graalvm` | none |
 
 Temurin also publishes no Java 8 for Apple silicon. When there is no build for

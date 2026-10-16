@@ -85,15 +85,30 @@ func java8Missing() string {
 	return ""
 }
 
-// noBuild says why distribution publishes no Java 21 for this machine, if so.
+// noBuild says why distribution publishes no build for this machine, if so.
 func noBuild(t *testing.T, distribution string) string {
 	t.Helper()
-	p, err := javadist.Host("")
-	assert.NilError(t, err)
-	if p.Libc == "musl" && (distribution == "oracle-openjdk" || distribution == "graalvm") {
+	if musl(t) && (distribution == "oracle-openjdk" || distribution == "graalvm") {
 		return distribution + " publishes no musl builds"
 	}
 	return ""
+}
+
+// otherVersion is the Java version to install of distribution on this
+// machine: 21, or 17 for Microsoft on musl, which has only 11 and 17.
+func otherVersion(t *testing.T, distribution string) string {
+	t.Helper()
+	if musl(t) && distribution == "microsoft" {
+		return "17"
+	}
+	return "21"
+}
+
+func musl(t *testing.T) bool {
+	t.Helper()
+	p, err := javadist.Host("")
+	assert.NilError(t, err)
+	return p.Libc == "musl"
 }
 
 // linkedJava returns a command running java -version through its link in
