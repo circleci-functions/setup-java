@@ -44,6 +44,7 @@ var vendors = []func(s *Server, w http.ResponseWriter, r *http.Request) bool{
 	serveAzul,
 	serveCorretto,
 	serveMicrosoft,
+	serveJDKJavaNet,
 }
 
 // New starts a server listing builds, and stops it when t ends.

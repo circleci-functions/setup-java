@@ -50,6 +50,7 @@ var sdkmanVendors = map[string]string{
 	"sapmchn":    "sapmachine",
 	"jbr":        "jetbrains",
 	"kona":       "kona",
+	"open":       "oracle-openjdk",
 }
 
 var asdfVendors = map[string]string{
@@ -67,6 +68,7 @@ var asdfVendors = map[string]string{
 	"sapmachine":   "sapmachine",
 	"kona":         "kona",
 	"jetbrains":    "jetbrains",
+	"openjdk":      "oracle-openjdk",
 }
 
 // FromFile reads the Java version from a .java-version, .tool-versions or

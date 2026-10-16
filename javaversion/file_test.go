@@ -34,8 +34,12 @@ func TestFromFile(t *testing.T) {
 			want: FileVersion{Spec: "21.0.2", Distribution: "graalvm-community", Vendor: "graalvm-community"},
 		},
 		{
-			name: "tool-versions unknown vendor", file: ".tool-versions", content: "java openjdk-21\n",
-			want: FileVersion{Spec: "21", Vendor: "openjdk"},
+			name: "tool-versions openjdk", file: ".tool-versions", content: "java openjdk-21\n",
+			want: FileVersion{Spec: "21", Distribution: "oracle-openjdk", Vendor: "openjdk"},
+		},
+		{
+			name: "tool-versions unknown vendor", file: ".tool-versions", content: "java mandrel-21\n",
+			want: FileVersion{Spec: "21", Vendor: "mandrel"},
 		},
 		{
 			name: "sdkmanrc", file: ".sdkmanrc", content: "# comment\njava=21.0.5-tem\nmaven=3.9.6\n",

@@ -12,6 +12,9 @@ var distributions = map[string]func(apiURL string) Distribution{
 	"zulu":      func(apiURL string) Distribution { return Zulu{BaseURL: cmpOr(apiURL, AzulURL)} },
 	"corretto":  newCorretto,
 	"microsoft": newMicrosoft,
+	"oracle-openjdk": func(apiURL string) Distribution {
+		return OracleOpenJDK{BaseURL: cmpOr(apiURL, JDKJavaNetURL)}
+	},
 }
 
 // Names returns the names of the supported distributions, sorted.
