@@ -15,25 +15,35 @@ import (
 	"gotest.tools/v3/skip"
 
 	"github.com/circleci-functions/toolkit/pathlink"
+
+	"github.com/circleci-functions/setup-java/javadist"
 )
 
-func TestAcceptance_InstallTemurin(t *testing.T) {
+func TestAcceptance_Install(t *testing.T) {
 	tests := []struct {
-		name    string
-		args    []string
-		version *regexp.Regexp
-		// noBuild says why Temurin publishes no build for this machine, if so.
+		distribution string
+		args         []string
+		version      *regexp.Regexp
+		// noBuild says why the distribution publishes no build for this
+		// machine, if so.
 		noBuild string
 	}{
-		{name: "jdk", args: []string{"--java-version", acceptanceVersion()}, version: regexp.MustCompile(`^` + regexp.QuoteMeta(acceptanceVersion()) + `\b`)},
-		{name: "jre", args: []string{"--java-version", "21", "--java-package", "jre"}, version: regexp.MustCompile(`^21\.`)},
-		{name: "java 8", args: []string{"--java-version", "8"}, version: regexp.MustCompile(`^1\.8\.0_`), noBuild: java8Missing()},
+		{distribution: "temurin", args: []string{"--java-version", acceptanceVersion()}, version: regexp.MustCompile(`^` + regexp.QuoteMeta(acceptanceVersion()) + `\b`)},
+		{distribution: "temurin", args: []string{"--java-version", "21", "--java-package", "jre"}, version: regexp.MustCompile(`^21\.`)},
+		{distribution: "temurin", args: []string{"--java-version", "8"}, version: regexp.MustCompile(`^1\.8\.0_`), noBuild: java8Missing()},
+		{distribution: "zulu", args: []string{"--java-version", "21"}, version: regexp.MustCompile(`^21\.`)},
+		{distribution: "zulu", args: []string{"--java-version", "17", "--java-package", "jdk+fx"}, version: regexp.MustCompile(`^17\.`)},
+		{distribution: "corretto", args: []string{"--java-version", "21"}, version: regexp.MustCompile(`^21\.`)},
+		{distribution: "microsoft", args: []string{"--java-version", "21"}, version: regexp.MustCompile(`^21\.`)},
+		{distribution: "oracle-openjdk", args: []string{"--java-version", "21"}, version: regexp.MustCompile(`^21\.0\.2$`)},
+		{distribution: "graalvm", args: []string{"--java-version", "21"}, version: regexp.MustCompile(`^21\.`)},
+		{distribution: "graalvm", args: []string{"--java-version", "21.0.5"}, version: regexp.MustCompile(`^21\.0\.5$`)},
 	}
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(tc.distribution+" "+strings.Join(tc.args, " "), func(t *testing.T) {
 			skip.If(t, tc.noBuild != "", tc.noBuild)
 			s, run := sandbox(t)
-			args := append(tc.args, "--distribution", "temurin", "--install-dir", s.InstallDir, "--bin-dir", s.BinDir, "--cache=false")
+			args := append(tc.args, "--distribution", tc.distribution, "--install-dir", s.InstallDir, "--bin-dir", s.BinDir, "--cache=false")
 			out, err := run(t, nil, args...)
 			assert.NilError(t, err, "output: %s", out)
 
@@ -71,6 +81,17 @@ func TestAcceptance_InstallTemurin_CacheRoundTrip(t *testing.T) {
 func java8Missing() string {
 	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
 		return "Temurin publishes no Java 8 for Apple silicon"
+	}
+	return ""
+}
+
+// noBuild says why distribution publishes no Java 21 for this machine, if so.
+func noBuild(t *testing.T, distribution string) string {
+	t.Helper()
+	p, err := javadist.Host("")
+	assert.NilError(t, err)
+	if p.Libc == "musl" && (distribution == "oracle-openjdk" || distribution == "graalvm") {
+		return distribution + " publishes no musl builds"
 	}
 	return ""
 }

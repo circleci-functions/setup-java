@@ -43,10 +43,29 @@ one exception, [below](#when-another-jdk-comes-first-on-windows).
 
 `--distribution` is required. There is no default.
 
-| Distribution | Installs |
-|--------------|----------|
-| `temurin` | [Eclipse Temurin](https://adoptium.net), from the Adoptium API |
-| `jdkfile` | the JDK archive given by `--jdk-file` |
+| Distribution | Installs | `--java-package` |
+|--------------|----------|------------------|
+| `temurin` | [Eclipse Temurin](https://adoptium.net) | `jdk`, `jre` |
+| `zulu` | [Azul Zulu](https://www.azul.com/downloads/) | `jdk`, `jre`, `jdk+fx`, `jre+fx`, `jdk+crac`, `jre+crac` |
+| `corretto` | [Amazon Corretto](https://aws.amazon.com/corretto/) | `jdk`, `jre` |
+| `microsoft` | [Microsoft Build of OpenJDK](https://www.microsoft.com/openjdk) | `jdk` |
+| `oracle-openjdk` | [Oracle's OpenJDK builds](https://jdk.java.net) | `jdk` |
+| `graalvm` | [Oracle GraalVM](https://www.graalvm.org) | `jdk` |
+| `jdkfile` | the JDK archive given by `--jdk-file` | `jdk` |
+
+`+fx` packages include JavaFX. `+crac` packages include
+[CRaC](https://openjdk.org/projects/crac/), which lets an app start from a saved
+snapshot.
+
+Some distributions take fewer kinds of version than the table below:
+
+- **Corretto** publishes only the newest build of each version, so `21` works
+  but an older `21.0.x` does not.
+- **Oracle GraalVM** takes a major (`21`), a full version (`21.0.5`) or `latest`.
+  It does not take ranges or build numbers. Java 17 is only available by full
+  version, such as `17.0.12`. `latest` fails while the newest Java release has
+  no GraalVM build yet. It also sets `GRAALVM_HOME`.
+- Only **Temurin** installs early-access builds.
 
 ### Choosing a version
 
@@ -62,7 +81,7 @@ Pass `--java-version`, `--java-version-file`, or both. One is required.
 | `1.8`, `1.8.0_292` | the same, in the old Java 8 notation |
 | `>=17 <22`, `17.x` | the newest release in the range |
 | `latest` | the newest release |
-| `26-ea` | the newest early-access build of 26 |
+| `26-ea` | the newest early-access build of 26 (Temurin only) |
 
 `--java-version-file` reads the version from a file:
 
@@ -136,14 +155,18 @@ there by later jobs, so it is only downloaded once per version and platform.
 `--cache=false` turns this off. A `jdkfile` install is never cached: the
 archive is already on the machine.
 
+Oracle replaces a GraalVM major's newest build in place, so a GraalVM install
+asked for by major is cached by the build's checksum. When Oracle publishes a
+new build, the next job downloads it.
+
 ### Flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--distribution` | required | `temurin`, or `jdkfile` to install `--jdk-file` |
+| `--distribution` | required | `temurin`, `zulu`, `corretto`, `microsoft`, `oracle-openjdk`, `graalvm`, or `jdkfile` to install `--jdk-file` |
 | `--java-version` | | Version to install, as above. Comma-separated to install several; the last is the default |
 | `--java-version-file` | | File to read the version from: `.java-version`, `.tool-versions` or `.sdkmanrc` |
-| `--java-package` | `jdk` | `jdk` or `jre` |
+| `--java-package` | `jdk` | `jdk`, `jre`, or a variant such as `jdk+fx`; which ones depends on the distribution |
 | `--architecture` | the machine's | `x64`, `x86`, `aarch64`, `armv7`, `ppc64le`, `ppc64`, `riscv64` or `s390x`. `amd64` and `arm64` work too |
 | `--jdk-file` | | JDK archive to install, with `--distribution jdkfile` |
 | `--make-default-jdk` | `true` | Make this JDK the one `java`, `javac` and `JAVA_HOME` resolve to. `false` installs it only for toolchains |
@@ -157,6 +180,15 @@ On Linux it detects whether the system uses glibc (Ubuntu, Debian, RHEL and
 most others) or musl (Alpine), and installs a build for that C library.
 
 Which builds exist depends on the distribution, the version and the
-architecture. Temurin, for example, publishes musl builds for x64 and
-aarch64 only, and no Java 8 for Apple silicon. When there is no build for the
-machine, the step fails and says so.
+architecture. For musl (Alpine):
+
+| Distribution | musl builds |
+|--------------|-------------|
+| `temurin` | x64, aarch64 |
+| `zulu` | x64, aarch64, but not the `+fx` packages |
+| `corretto` | x64, aarch64 |
+| `microsoft` | x64 |
+| `oracle-openjdk`, `graalvm` | none |
+
+Temurin also publishes no Java 8 for Apple silicon. When there is no build for
+the machine, the step fails and says so.

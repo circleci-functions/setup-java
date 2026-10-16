@@ -32,21 +32,25 @@ func TestAcceptance_InstallsOntoTheRealPath(t *testing.T) {
 
 	s := sdktest.NewSandbox(t, sdktest.WithLiveCache())
 	bashEnv := filepath.Join(t.TempDir(), "bash_env")
-	run := func(t *testing.T) string {
+	install := func(t *testing.T, distribution, version string) string {
 		t.Helper()
 		r := runner.New(t, binaryPath,
 			runner.WithUnsafeOSEnvVars(),
 			runner.WithUnsafeAdditionalEnvVars(map[string]string{"BASH_ENV": bashEnv}),
 		)
 		_, err := r.Run(
-			"--distribution", "temurin",
-			"--java-version", acceptanceVersion(),
+			"--distribution", distribution,
+			"--java-version", version,
 			"--install-dir", s.InstallDir,
 			"--cache-nonce", s.CacheKeyNonce,
 		)
 		out := r.StdoutString() + r.StderrString()
 		assert.NilError(t, err, "got: %s", out)
 		return out
+	}
+	run := func(t *testing.T) string {
+		t.Helper()
+		return install(t, "temurin", acceptanceVersion())
 	}
 
 	out := run(t)
@@ -120,12 +124,40 @@ func TestAcceptance_InstallsOntoTheRealPath(t *testing.T) {
 		assert.Assert(t, strings.Contains(got, `"`+short+`"`), got)
 	})
 
+	t.Run("OtherDistributions", func(t *testing.T) {
+		for _, distribution := range []string{"zulu", "corretto", "microsoft", "oracle-openjdk", "graalvm"} {
+			t.Run(distribution, func(t *testing.T) {
+				reason := noBuild(t, distribution)
+				skip.If(t, reason != "", reason)
+				out := install(t, distribution, "21")
+				home := reported(t, out, `installed at (.+)$`)
+				got, err := laterStep(t, "java", "-XshowSettings:properties", "-version")
+				assert.NilError(t, err, "a later step could not run java: %s", got)
+				ran := find(got, `java\.home = (.+)$`)
+				assert.Assert(t, samePath(ran, home), "a later step runs the JDK at %s, not the %s one at %s", ran, distribution, home)
+			})
+		}
+	})
+
 	t.Run("NotIntoADirectoryOwnedByAnotherTool", func(t *testing.T) {
 		for _, part := range strings.Split(filepath.ToSlash(linked), "/") {
 			assert.Assert(t, part != "shims",
 				"a version manager rewrites its shims directory, taking the link with it: %s", linked)
 		}
 	})
+}
+
+func samePath(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	resolve := func(p string) string {
+		if r, err := filepath.EvalSymlinks(p); err == nil {
+			return r
+		}
+		return filepath.Clean(p)
+	}
+	return strings.EqualFold(resolve(a), resolve(b))
 }
 
 // removeLinks takes the JDK tools back off PATH at the end of the test.

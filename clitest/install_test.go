@@ -32,7 +32,7 @@ var builds = []fakejdk.Build{
 	{Version: javaversion.Version{Major: 28, Build: 19, EA: true}},
 }
 
-// fixture is a fake Adoptium API and the sandbox to install from it into.
+// fixture is a fake vendor API and the sandbox to install from it into.
 type fixture struct {
 	srv    *fakejdk.Server
 	s      *sdktest.Sandbox
@@ -42,6 +42,12 @@ type fixture struct {
 
 // newFixture needs a Unix: the fake JDKs' tools are shell scripts.
 func newFixture(t *testing.T) fixture {
+	t.Helper()
+	return newFixtureWith(t, builds...)
+}
+
+// newFixtureWith is newFixture for a server listing only these builds.
+func newFixtureWith(t *testing.T, builds ...fakejdk.Build) fixture {
 	t.Helper()
 	skip.If(t, runtime.GOOS == "windows", "the fake JDKs' tools are shell scripts")
 	s, run := sandbox(t)
