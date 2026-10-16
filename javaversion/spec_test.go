@@ -35,6 +35,29 @@ func TestVersion_String(t *testing.T) {
 	assert.Equal(t, v(21, 5, 0, 11).DirName(), "21.0.5_11")
 }
 
+func TestParseVersion(t *testing.T) {
+	tests := []struct {
+		raw  string
+		want Version
+	}{
+		{raw: "25.0.3", want: Version{Major: 25, Security: 3}},
+		{raw: "21", want: Version{Major: 21}},
+		{raw: "21.0.12.1", want: Version{Major: 21, Security: 12, Patch: 1}},
+		{raw: "21.0.5+11", want: Version{Major: 21, Security: 5, Build: 11}},
+		{raw: "17.0.2+8.1", want: Version{Major: 17, Security: 2, Build: 8, Revision: 1}},
+		{raw: "21.0.5+9-LTS-jvmci-23.1-b48", want: Version{Major: 21, Security: 5, Build: 9}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.raw, func(t *testing.T) {
+			got, err := ParseVersion(tc.raw)
+			assert.NilError(t, err)
+			assert.Equal(t, got, tc.want)
+		})
+	}
+	_, err := ParseVersion("1.8.0_292")
+	assert.ErrorContains(t, err, "is not a Java version")
+}
+
 func TestParse_Invalid(t *testing.T) {
 	for _, raw := range []string{"", "  ", "latest-ea", "0", "0+35", "banana", ">=foo"} {
 		t.Run(raw, func(t *testing.T) {

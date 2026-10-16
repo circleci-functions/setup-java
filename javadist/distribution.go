@@ -81,6 +81,27 @@ func noBuilds(vendor, pkg string, p Platform, ea bool) string {
 	return fmt.Sprintf("%s publishes no %s %s for %s", vendor, pkg, kind, p)
 }
 
+// fetchSHA256 reads the checksum file at url, whose first field is the hex
+// SHA-256. It returns "" when there is no such file.
+func fetchSHA256(ctx context.Context, url string) (string, error) {
+	var body string
+	err := newClient(ctx, "checksum", "").Call(ctx, hc.NewRequest(http.MethodGet, "%s",
+		hc.RouteParams(url),
+		hc.StringDecoder(&body),
+	))
+	if hc.HasStatusCode(err, http.StatusNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("fetch checksum %s: %w", url, err)
+	}
+	fields := strings.Fields(body)
+	if len(fields) == 0 || len(fields[0]) != 64 {
+		return "", fmt.Errorf("checksum %s holds no SHA-256", url)
+	}
+	return strings.ToLower(fields[0]), nil
+}
+
 func newClient(ctx context.Context, name, baseURL string) *hc.Client {
 	return hc.New(ctx, hc.Config{Name: name, BaseURL: baseURL, Timeout: 2 * time.Minute})
 }

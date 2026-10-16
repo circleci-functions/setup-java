@@ -43,6 +43,7 @@ var vendors = []func(s *Server, w http.ResponseWriter, r *http.Request) bool{
 	serveAdoptium,
 	serveAzul,
 	serveCorretto,
+	serveMicrosoft,
 }
 
 // New starts a server listing builds, and stops it when t ends.
@@ -87,7 +88,7 @@ func (s *Server) Requests() []string {
 func (s *Server) Downloads() int {
 	n := 0
 	for _, r := range s.Requests() {
-		if strings.HasPrefix(r, "/download/") {
+		if strings.HasPrefix(r, "/download/") && !strings.Contains(r, ".sha256") {
 			n++
 		}
 	}
@@ -115,14 +116,14 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	s.requests = append(s.requests, r.URL.RequestURI())
 	s.mu.Unlock()
 
-	if strings.HasPrefix(r.URL.Path, "/download/") {
-		s.serveArchive(w, r)
-		return
-	}
 	for _, vendor := range vendors {
 		if vendor(s, w, r) {
 			return
 		}
+	}
+	if strings.HasPrefix(r.URL.Path, "/download/") {
+		s.serveArchive(w, r)
+		return
 	}
 	http.NotFound(w, r)
 }

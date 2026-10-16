@@ -5,6 +5,7 @@ package javaversion
 import (
 	"cmp"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -87,6 +88,25 @@ func compareBool(a, b bool) int {
 
 func (v Version) fields() []int {
 	return []int{v.Major, v.Minor, v.Security, v.Patch}
+}
+
+var versionForm = regexp.MustCompile(`^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?(?:\+(\d+)(?:\.(\d+))?)?(?:-.*)?$`)
+
+// ParseVersion parses a release version as a vendor writes it: 21, 21.0.5,
+// 21.0.12.1, 21.0.5+11, or 17.0.2+8.1 with a vendor revision after the build.
+// Anything after a "-", as in 21.0.5+11-LTS, is ignored.
+func ParseVersion(s string) (Version, error) {
+	m := versionForm.FindStringSubmatch(strings.TrimSpace(s))
+	if m == nil {
+		return Version{}, fmt.Errorf("%q is not a Java version", s)
+	}
+	n := make([]int, len(m)-1)
+	for i, f := range m[1:] {
+		if f != "" {
+			n[i], _ = strconv.Atoi(f)
+		}
+	}
+	return Version{Major: n[0], Minor: n[1], Security: n[2], Patch: n[3], Build: n[4], Revision: n[5]}, nil
 }
 
 func atoi(s string) (int, error) {

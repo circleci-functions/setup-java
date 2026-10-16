@@ -8,9 +8,10 @@ import (
 // distributions maps each distribution's name to a constructor taking the
 // base URL to look builds up in, or "" for the vendor's own.
 var distributions = map[string]func(apiURL string) Distribution{
-	"temurin":  func(apiURL string) Distribution { return Temurin{BaseURL: cmpOr(apiURL, AdoptiumURL)} },
-	"zulu":     func(apiURL string) Distribution { return Zulu{BaseURL: cmpOr(apiURL, AzulURL)} },
-	"corretto": newCorretto,
+	"temurin":   func(apiURL string) Distribution { return Temurin{BaseURL: cmpOr(apiURL, AdoptiumURL)} },
+	"zulu":      func(apiURL string) Distribution { return Zulu{BaseURL: cmpOr(apiURL, AzulURL)} },
+	"corretto":  newCorretto,
+	"microsoft": newMicrosoft,
 }
 
 // Names returns the names of the supported distributions, sorted.
