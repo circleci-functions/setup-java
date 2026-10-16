@@ -15,6 +15,8 @@ import (
 	"time"
 
 	hc "github.com/circleci-functions/toolkit/httpcl"
+
+	"github.com/circleci-functions/setup-java/javaversion"
 )
 
 // macHome is where a macOS JDK bundle keeps the JDK itself.
@@ -40,6 +42,27 @@ func Java(home string) string {
 
 func Installed(root string) bool {
 	return exists(Java(Home(root)))
+}
+
+// ReleaseVersion reads the version of the JDK whose JAVA_HOME is home from
+// its release file.
+func ReleaseVersion(home string) (javaversion.Version, error) {
+	data, err := os.ReadFile(filepath.Join(home, "release")) //nolint:gosec // a file in a JDK this package installed
+	if err != nil {
+		return javaversion.Version{}, err
+	}
+	props := map[string]string{}
+	for line := range strings.SplitSeq(string(data), "\n") {
+		if k, v, ok := strings.Cut(strings.TrimSpace(line), "="); ok {
+			props[k] = strings.Trim(v, `"`)
+		}
+	}
+	for _, key := range []string{"JAVA_RUNTIME_VERSION", "JAVA_VERSION"} {
+		if v, err := javaversion.ParseVersion(props[key]); err == nil && props[key] != "" {
+			return v, nil
+		}
+	}
+	return javaversion.Version{}, fmt.Errorf("no Java version in %s", filepath.Join(home, "release"))
 }
 
 // Install downloads r, checks it against its SHA-256 when the vendor

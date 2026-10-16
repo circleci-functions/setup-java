@@ -21,6 +21,10 @@ type Release struct {
 	// SHA256 is the archive's checksum as the vendor publishes it, or "" when
 	// it publishes none.
 	SHA256 string
+	// Floating marks a link the vendor replaces in place with each new build.
+	// Version then holds only the major; the archive's checksum is what tells
+	// one build from the next, and the version is read once it is unpacked.
+	Floating bool
 }
 
 // Distribution resolves version specs to builds from one vendor.
@@ -37,6 +41,21 @@ type Distribution interface {
 // builds.
 type earlyAccess interface {
 	EarlyAccess() bool
+}
+
+// envSetter is implemented by a distribution whose tools expect variables of
+// their own beyond JAVA_HOME.
+type envSetter interface {
+	Env(home string) map[string]string
+}
+
+// Env returns the variables, beyond JAVA_HOME, that d's JDK at home needs
+// when it is the default.
+func Env(d Distribution, home string) map[string]string {
+	if e, ok := d.(envSetter); ok {
+		return e.Env(home)
+	}
+	return nil
 }
 
 func CheckPackage(d Distribution, pkg string) error {

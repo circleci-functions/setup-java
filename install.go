@@ -5,9 +5,11 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/circleci-functions/toolkit/sdk"
@@ -40,6 +42,9 @@ type jdk struct {
 	label string
 	major int
 	home  string
+	// env holds the variables, beyond JAVA_HOME, the JDK needs when it is the
+	// default.
+	env map[string]string
 }
 
 func (c *installCmd) Run(ctx context.Context, client *sdk.Client) error {
@@ -75,6 +80,7 @@ func (c *installCmd) Run(ctx context.Context, client *sdk.Client) error {
 			return err
 		}
 		vars["JAVA_HOME"] = def.home
+		maps.Copy(vars, def.env)
 	} else {
 		fmt.Fprintf(os.Stderr, "setup-java: --make-default-jdk=false, so java and JAVA_HOME are left as they were\n")
 	}
@@ -219,6 +225,10 @@ func (c *installCmd) installRelease(ctx context.Context, client *sdk.Client, spe
 			return err
 		}
 		release = r
+		if r.Floating {
+			fmt.Fprintf(os.Stderr, "setup-java: resolved %q to the newest %s build of Java %d (%s)\n", spec, dist.Name(), r.Version.Major, platform)
+			return nil
+		}
 		fmt.Fprintf(os.Stderr, "setup-java: resolved %q to %s %s (%s)\n", spec, dist.Name(), r.Version, platform)
 		return nil
 	}
@@ -229,25 +239,35 @@ func (c *installCmd) installRelease(ctx context.Context, client *sdk.Client, spe
 		}
 		version = release.Version
 	}
-	root := filepath.Join(installDir, c.installName(version.DirName(), platform))
-	j := jdk{label: version.String(), major: version.Major}
-	key := c.cacheKey(version.DirName(), platform, root)
-	if c.restore(ctx, client, key, version.String(), root) {
-		j.home = javadist.Home(root)
-		return j, nil
+	id, label := version.DirName(), version.String()
+	if release.Floating {
+		id, label = fmt.Sprintf("%d-%s", version.Major, release.SHA256[:12]), strconv.Itoa(version.Major)
 	}
-	if exact {
-		if err := resolve(); err != nil {
+	root := filepath.Join(installDir, c.installName(id, platform))
+	j := jdk{label: label, major: version.Major}
+	key := c.cacheKey(id, platform, root)
+	if !c.restore(ctx, client, key, j.label, root) {
+		if exact {
+			if err := resolve(); err != nil {
+				return jdk{}, err
+			}
+		}
+		if err := javadist.Install(ctx, release, root); err != nil {
 			return jdk{}, err
 		}
-	}
-	if err := javadist.Install(ctx, release, root); err != nil {
-		return jdk{}, err
-	}
-	if c.Cache {
-		sdk.LogCacheErr("save", client.SaveCache(ctx, key, []string{root}, sdk.WithStepName("Saving Java "+version.String())))
+		if c.Cache {
+			sdk.LogCacheErr("save", client.SaveCache(ctx, key, []string{root}, sdk.WithStepName("Saving Java "+j.label)))
+		}
 	}
 	j.home = javadist.Home(root)
+	j.env = javadist.Env(dist, j.home)
+	if release.Floating {
+		v, err := javadist.ReleaseVersion(j.home)
+		if err != nil {
+			return jdk{}, err
+		}
+		j.label = v.String()
+	}
 	return j, nil
 }
 

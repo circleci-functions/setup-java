@@ -31,10 +31,11 @@ type Build struct {
 type Server struct {
 	URL string
 
-	builds   []Build
-	mu       sync.Mutex
-	requests []string
-	corrupt  bool
+	builds    []Build
+	mu        sync.Mutex
+	requests  []string
+	downloads int
+	corrupt   bool
 }
 
 // vendors answer the requests under their API's paths, reporting false for a
@@ -44,6 +45,7 @@ var vendors = []func(s *Server, w http.ResponseWriter, r *http.Request) bool{
 	serveAzul,
 	serveCorretto,
 	serveMicrosoft,
+	serveGraalVM,
 	serveJDKJavaNet,
 }
 
@@ -85,15 +87,11 @@ func (s *Server) Requests() []string {
 	return slices.Clone(s.requests)
 }
 
-// Downloads returns how many archives have been served.
+// Downloads returns how many archives have been fetched.
 func (s *Server) Downloads() int {
-	n := 0
-	for _, r := range s.Requests() {
-		if strings.HasPrefix(r, "/download/") && !strings.Contains(r, ".sha256") {
-			n++
-		}
-	}
-	return n
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.downloads
 }
 
 // of returns the builds of distribution.
@@ -115,6 +113,9 @@ func (s *Server) downloadURL(b Build) string {
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.requests = append(s.requests, r.URL.RequestURI())
+	if r.Method == http.MethodGet && (strings.HasSuffix(r.URL.Path, ".tar.gz") || strings.HasSuffix(r.URL.Path, ".zip")) {
+		s.downloads++
+	}
 	s.mu.Unlock()
 
 	for _, vendor := range vendors {
