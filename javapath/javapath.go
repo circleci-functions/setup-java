@@ -179,7 +179,7 @@ func PrependPath(dir string) error {
 	if os.Getenv("BASH_ENV") == "" {
 		return errors.New("BASH_ENV is not set, so PATH cannot be changed for later steps")
 	}
-	return bashenv.ExportEnvVars(map[string]string{"PATH": shellQuote(unixPath(dir)) + `:"$PATH"`})
+	return bashenv.AddToPath(shellQuote(unixPath(dir)))
 }
 
 // unixPath turns a Windows path like C:\Users\x into /c/Users/x. Other paths
@@ -203,12 +203,12 @@ func Export(vars map[string]string) error {
 	if os.Getenv("BASH_ENV") == "" {
 		return errors.New("BASH_ENV is not set, so JAVA_HOME cannot be exported to later steps")
 	}
-	quoted := make(map[string]string, len(vars))
+	values := make(map[string]string, len(vars))
 	for k, v := range vars {
 		if runtime.GOOS == "windows" {
 			v = filepath.ToSlash(v)
 		}
-		quoted[k] = shellQuote(v)
+		values[k] = v
 	}
-	return bashenv.ExportEnvVars(quoted)
+	return bashenv.ExportEnvVars(values)
 }
