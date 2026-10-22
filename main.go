@@ -13,11 +13,13 @@ import (
 	"github.com/circleci-functions/toolkit/functionyaml"
 	"github.com/circleci-functions/toolkit/sdk"
 
+	"github.com/circleci-functions/setup-java/depcache"
 	"github.com/circleci-functions/setup-java/javadist"
 )
 
 type cli struct {
-	Install installCmd `cmd:"" default:"withargs" help:"Install a JDK, put java, javac and the other JDK tools on PATH, and set JAVA_HOME. Runs when no command is given."`
+	Install           installCmd   `cmd:"" default:"withargs" help:"Install a JDK, put java, javac and the other JDK tools on PATH, and set JAVA_HOME. Runs when no command is given."`
+	CacheDependencies cacheDepsCmd `cmd:"" name:"cache-dependencies" help:"Cache what a build tool downloads, without installing a JDK: restore it now, and save it at the end of the job if the job succeeds."`
 }
 
 func main() {
@@ -28,11 +30,13 @@ func run(ctx context.Context, client *sdk.Client) error {
 	var flags cli
 	kCtx := kong.Parse(&flags,
 		kong.Name("setup-java"),
-		kong.Description("Install a Java Development Kit, caching the download."),
+		kong.Description("Install a Java Development Kit, and optionally cache what Maven or Gradle downloads."),
 		kong.UsageOnError(),
 		kong.Vars{
 			"distributions":     strings.Join(javadist.Names(), ","),
 			"distribution_list": strings.Join(javadist.Names(), ", "),
+			"build_tools":       strings.Join(depcache.Names(), ","),
+			"build_tool_list":   strings.Join(depcache.Names(), " or "),
 		},
 		functionyaml.Embed(),
 	)

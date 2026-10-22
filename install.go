@@ -14,6 +14,7 @@ import (
 
 	"github.com/circleci-functions/toolkit/sdk"
 
+	"github.com/circleci-functions/setup-java/depcache"
 	"github.com/circleci-functions/setup-java/javadist"
 	"github.com/circleci-functions/setup-java/javapath"
 	"github.com/circleci-functions/setup-java/javaversion"
@@ -24,18 +25,20 @@ const jdkFileDistribution = "jdkfile"
 // installCmd installs one or more JDKs, makes the last of them the one later
 // steps run, and exports each one's home by major version.
 type installCmd struct {
-	JavaVersion     []string `help:"Java version to install: a major (21), a full version (21.0.5 or 21.0.5+11), a semver range (>=17 <22), or latest. Add -ea for an early-access build (26-ea). Separate several with commas to install each; the last becomes the default." example:"21"`
-	JavaVersionFile string   `help:"File to read the Java version from: .java-version, .tool-versions or .sdkmanrc. When --java-version is set too, the two must ask for the same version." type:"path"`
-	Distribution    string   `help:"Java distribution to install: ${distribution_list}, or jdkfile to install the archive given by --jdk-file." enum:"${distributions},jdkfile" required:"" example:"temurin"`
-	JavaPackage     string   `help:"Package type to install: jdk or jre, or for some distributions a variant such as jdk+fx." default:"jdk"`
-	Architecture    string   `help:"Architecture to install for: x64, x86, aarch64, armv7, ppc64le, ppc64, riscv64 or s390x (amd64 and arm64 work too). Defaults to the machine's."`
-	JdkFile         string   `help:"JDK archive to install (.tar.gz, .tgz or .zip), with --distribution jdkfile." type:"path"`
-	MakeDefaultJdk  bool     `help:"Make this JDK the one java, javac and JAVA_HOME resolve to. Set to false to install it only for build-tool toolchains, which find it through JAVA_HOME_<major>_<ARCH>." default:"true"`
-	Cache           bool     `help:"Restore the JDK from the job cache, and save it after a fresh download. Set to false to disable caching." default:"true"`
-	InstallDir      string   `help:"Directory to install JDKs under." default:"~/.cache/setup-java" hidden:""`
-	BinDir          string   `help:"Link the JDK tools into this directory instead of discovering one on PATH." type:"path" hidden:""`
-	CacheNonce      string   `help:"Partition the JDK cache, so a test run cannot restore an earlier run's install." hidden:""`
-	APIURL          string   `name:"api-url" help:"Look builds up under this URL instead of the distribution's own." hidden:""`
+	JavaVersion       []string `help:"Java version to install: a major (21), a full version (21.0.5 or 21.0.5+11), a semver range (>=17 <22), or latest. Add -ea for an early-access build (26-ea). Separate several with commas to install each; the last becomes the default." example:"21"`
+	JavaVersionFile   string   `help:"File to read the Java version from: .java-version, .tool-versions or .sdkmanrc. When --java-version is set too, the two must ask for the same version." type:"path"`
+	Distribution      string   `help:"Java distribution to install: ${distribution_list}, or jdkfile to install the archive given by --jdk-file." enum:"${distributions},jdkfile" required:"" example:"temurin"`
+	JavaPackage       string   `help:"Package type to install: jdk or jre, or for some distributions a variant such as jdk+fx." default:"jdk"`
+	Architecture      string   `help:"Architecture to install for: x64, x86, aarch64, armv7, ppc64le, ppc64, riscv64 or s390x (amd64 and arm64 work too). Defaults to the machine's."`
+	JdkFile           string   `help:"JDK archive to install (.tar.gz, .tgz or .zip), with --distribution jdkfile." type:"path"`
+	CacheDependencies string   `help:"Also cache what this build tool downloads: ${build_tool_list}. It is restored now, and saved at the end of the job if the job succeeds." enum:"${build_tools}," default:""`
+	depCacheFlags     `embed:""`
+	MakeDefaultJdk    bool   `help:"Make this JDK the one java, javac and JAVA_HOME resolve to. Set to false to install it only for build-tool toolchains, which find it through JAVA_HOME_<major>_<ARCH>." default:"true"`
+	Cache             bool   `help:"Restore the JDK from the job cache, and save it after a fresh download. Set to false to disable caching." default:"true"`
+	InstallDir        string `help:"Directory to install JDKs under." default:"~/.cache/setup-java" hidden:""`
+	BinDir            string `help:"Link the JDK tools into this directory instead of discovering one on PATH." type:"path" hidden:""`
+	CacheNonce        string `help:"Partition the JDK cache, so a test run cannot restore an earlier run's install." hidden:""`
+	APIURL            string `name:"api-url" help:"Look builds up under this URL instead of the distribution's own." hidden:""`
 }
 
 type jdk struct {
@@ -51,6 +54,15 @@ func (c *installCmd) Run(ctx context.Context, client *sdk.Client) error {
 	specs, err := c.specs()
 	if err != nil {
 		return err
+	}
+	var deps []depcache.Entry
+	switch {
+	case c.CacheDependencies != "":
+		if deps, err = c.planDeps(c.CacheDependencies, c.CacheNonce); err != nil {
+			return err
+		}
+	case c.set():
+		return errors.New("--cache-dependency-path, --cache-path and --cache-read-only need --cache-dependencies")
 	}
 	platform, err := javadist.Host(c.Architecture)
 	if err != nil {
@@ -85,6 +97,9 @@ func (c *installCmd) Run(ctx context.Context, client *sdk.Client) error {
 		fmt.Fprintf(os.Stderr, "setup-java: --make-default-jdk=false, so java and JAVA_HOME are left as they were\n")
 	}
 	export(vars)
+	if len(deps) > 0 {
+		c.restoreDeps(ctx, client, deps)
+	}
 	return nil
 }
 

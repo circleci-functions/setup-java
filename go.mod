@@ -5,6 +5,7 @@ go 1.26.5
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/alecthomas/kong v1.16.0
+	github.com/bmatcuk/doublestar/v4 v4.10.3
 	github.com/circleci-functions/toolkit v0.3.0
 	gotest.tools/v3 v3.5.2
 )
