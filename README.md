@@ -2,7 +2,7 @@
 
 Installs a Java Development Kit (JDK) and makes it the one the rest of the job
 uses: `java`, `javac` and the other JDK tools go on `PATH`, and `JAVA_HOME`
-points at it.
+points at it. It can also cache what Maven or Gradle downloads.
 
 ```yaml
 functions:
@@ -18,6 +18,7 @@ jobs:
           with:
             distribution: temurin
             java-version: "21"
+            cache-dependencies: maven
       - run: ./mvnw verify
 ```
 
@@ -171,6 +172,68 @@ new build, the next job downloads it.
 | `--jdk-file` | | JDK archive to install, with `--distribution jdkfile` |
 | `--make-default-jdk` | `true` | Make this JDK the one `java`, `javac` and `JAVA_HOME` resolve to. `false` installs it only for toolchains |
 | `--cache` | `true` | Restore the JDK from the job cache, and save it after a download |
+| `--cache-dependencies` | | Also cache what `maven` or `gradle` downloads. See [Caching dependencies](#caching-dependencies) |
+| `--cache-dependency-path` | | Build files to key the dependency cache on, instead of the build tool's own |
+| `--cache-path` | | Folders to cache instead of the build tool's own |
+| `--cache-read-only` | `false` | Restore the dependency cache, but do not save it |
+
+## Caching dependencies
+
+`--cache-dependencies maven` or `--cache-dependencies gradle` caches what the
+build tool downloads. setup-java restores the cache when it runs, and saves it
+at the end of the job if the job succeeds, so a failed build never saves a
+half-finished download.
+
+| Build tool | Folders cached | Key built from |
+|------------|----------------|----------------|
+| `maven` | `~/.m2/repository` | `**/pom.xml`, `**/.mvn/wrapper/maven-wrapper.properties`, `**/.mvn/extensions.xml` |
+| | `~/.m2/wrapper/dists` | `**/.mvn/wrapper/maven-wrapper.properties` |
+| `gradle` | `~/.gradle/caches` | `**/*.gradle*`, `**/gradle.properties`, `**/gradle-wrapper.properties`, `gradle/*.versions.toml`, `**/versions.properties`, `buildSrc/**/Versions.kt`, `buildSrc/**/Dependencies.kt` |
+| | `~/.gradle/wrapper` | `**/gradle-wrapper.properties` |
+
+The build files are found under the step's working directory, so run the step
+in the project's directory. The key is a hash of their names and contents, so
+it changes when the dependencies do. When nothing is cached under the exact
+key yet, the newest cache for the same build tool is restored instead, and only
+what changed is downloaded. The wrapper is cached on its own, so it survives
+changes to the build files. A project with no wrapper skips that cache, but one
+with no build files at all fails the step.
+
+Gradle's folders follow `$GRADLE_USER_HOME` when it is set.
+
+| Flag | What it does |
+|------|--------------|
+| `--cache-dependency-path` | Build files to key the cache on, as globs relative to the working directory, e.g. `backend/**/pom.xml`. Separate several with commas |
+| `--cache-path` | Folders to cache instead of the defaults. `~` is the home directory |
+| `--cache-read-only` | Restore the cache, but do not save it |
+
+### Caching without installing a JDK
+
+On an image that already has Java, such as `cimg/openjdk`, the
+`cache-dependencies` command caches without installing anything. It takes
+`--build-tool maven` or `--build-tool gradle`, and the three flags above.
+
+```yaml
+functions:
+  setup-java: github.com/circleci-functions/setup-java@<version>
+
+jobs:
+  build:
+    docker:
+      - image: cimg/openjdk:21.0
+    steps:
+      - checkout
+      - setup-java/cache-dependencies:
+          with:
+            build-tool: gradle
+      - run: ./gradlew build
+```
+
+Without the `functions:` block:
+
+```yaml
+- run: circleci run github.com/circleci-functions/setup-java@<version> -- cache-dependencies --build-tool gradle
+```
 
 ## Platform support
 
