@@ -4,6 +4,8 @@ Installs a Java Development Kit (JDK) and makes it the one the rest of the job
 uses: `java`, `javac` and the other JDK tools go on `PATH`, and `JAVA_HOME`
 points at it. It can also cache what Maven or Gradle downloads.
 
+Use this function instead of the circleci/maven and circleci/gradle orbs.
+
 ```yaml
 functions:
   setup-java: github.com/circleci-functions/setup-java@<version>
