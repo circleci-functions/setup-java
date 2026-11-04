@@ -30,7 +30,7 @@ func run(ctx context.Context, client *sdk.Client) error {
 	var flags cli
 	kCtx := kong.Parse(&flags,
 		kong.Name("setup-java"),
-		kong.Description("Install a Java Development Kit, and optionally cache what Maven or Gradle downloads."),
+		kong.Description("Install a Java Development Kit, and optionally cache what Maven or Gradle downloads. Use this function instead of the circleci/maven and circleci/gradle orbs."),
 		kong.UsageOnError(),
 		kong.Vars{
 			"distributions":     strings.Join(javadist.Names(), ","),
