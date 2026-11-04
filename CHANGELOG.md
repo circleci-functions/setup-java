@@ -6,6 +6,14 @@ by its release PR (see [RELEASE.md](RELEASE.md)) and becomes its GitHub release 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-11-04
+
+### What's Changed
+* Say to use setup-java instead of the circleci/maven and circleci/gradle orbs by @mangyau in https://github.com/circleci-functions/setup-java/pull/10
+
+
+**Full Changelog**: https://github.com/circleci-functions/setup-java/compare/v0.3.0...v0.4.0
+
 ## [0.3.0] - 2026-10-23
 
 ### What's Changed
