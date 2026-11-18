@@ -18,6 +18,7 @@ func TestAcceptance_CacheDependencies(t *testing.T) {
 	for _, tool := range []struct{ name, file, label string }{
 		{name: "maven", file: "pom.xml", label: "Maven dependencies"},
 		{name: "gradle", file: "build.gradle", label: "Gradle dependencies"},
+		{name: "lein", file: "project.clj", label: "Leiningen dependencies"},
 	} {
 		t.Run(tool.name, func(t *testing.T) {
 			s := sdktest.NewSandbox(t, sdktest.WithLiveCache())

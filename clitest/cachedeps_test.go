@@ -40,9 +40,10 @@ func download(t *testing.T, path string) {
 }
 
 var buildTools = []struct {
-	tool        string
-	files       map[string]string
-	depPath     []string
+	tool    string
+	files   map[string]string
+	depPath []string
+	// wrapperPath is empty for a build tool with no wrapper.
 	wrapperPath []string
 }{
 	{
@@ -56,6 +57,11 @@ var buildTools = []struct {
 		files:       map[string]string{"build.gradle": "plugins {}", "gradle/wrapper/gradle-wrapper.properties": "distributionUrl=x"},
 		depPath:     []string{".gradle", "caches", "modules-2", "junit.jar"},
 		wrapperPath: []string{".gradle", "wrapper", "dists", "gradle.zip"},
+	},
+	{
+		tool:    "lein",
+		files:   map[string]string{"project.clj": `(defproject app "0.1.0")`},
+		depPath: []string{".m2", "repository", "junit", "junit.jar"},
 	},
 }
 
@@ -74,19 +80,22 @@ func TestCLI_CacheDependencies_RoundTrip(t *testing.T) {
 				out, err := runIn(t, f.s, dir, args...)
 				assert.NilError(t, err, "output: %s", out)
 				saves := f.s.Cache.PendingCacheSaves()
-				assert.Equal(t, len(saves), 2, "the dependencies and the wrapper: %v", saves)
+				paths := []string{filepath.Join(append([]string{f.s.Home}, bt.depPath...)...)}
+				if bt.wrapperPath != nil {
+					paths = append(paths, filepath.Join(append([]string{f.s.Home}, bt.wrapperPath...)...))
+				}
+				assert.Equal(t, len(saves), len(paths), "the dependencies, and the wrapper if any: %v", saves)
 				assert.Assert(t, strings.HasPrefix(saves[0], "setup-java-v1-"+bt.tool+"-"), "%v", saves)
 
-				jar := filepath.Join(append([]string{f.s.Home}, bt.depPath...)...)
-				wrapper := filepath.Join(append([]string{f.s.Home}, bt.wrapperPath...)...)
-				download(t, jar)
-				download(t, wrapper)
+				for _, path := range paths {
+					download(t, path)
+				}
 				f.s.Cache.EndJob(t)
 				assert.NilError(t, os.RemoveAll(filepath.Join(f.s.Home, bt.depPath[0])))
 
 				out, err = runIn(t, f.s, dir, args...)
 				assert.NilError(t, err, "output: %s", out)
-				for _, path := range []string{jar, wrapper} {
+				for _, path := range paths {
 					_, err = os.Stat(path)
 					assert.NilError(t, err, "the next job restores what this one downloaded")
 				}
@@ -151,7 +160,7 @@ func TestCLI_CacheDependencies_Rejects(t *testing.T) {
 		want  string
 	}{
 		{name: "no build files", files: map[string]string{"README.md": ""}, args: []string{"cache-dependencies", "--build-tool", "maven"}, want: "no build files found for maven"},
-		{name: "unknown build tool", args: []string{"cache-dependencies", "--build-tool", "sbt"}, want: `--build-tool must be one of "gradle","maven"`},
+		{name: "unknown build tool", args: []string{"cache-dependencies", "--build-tool", "sbt"}, want: `--build-tool must be one of "gradle","lein","maven"`},
 		{name: "no build tool", args: []string{"cache-dependencies"}, want: "missing flags: --build-tool"},
 		{name: "options without caching", args: []string{"--distribution", "temurin", "--java-version", "21", "--cache-read-only"}, want: "need --cache-dependencies"},
 		{name: "install without build files", files: map[string]string{"README.md": ""}, args: []string{"--distribution", "temurin", "--java-version", "21", "--cache-dependencies", "gradle"}, want: "no build files found for gradle"},

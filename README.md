@@ -2,7 +2,7 @@
 
 Installs a Java Development Kit (JDK) and makes it the one the rest of the job
 uses: `java`, `javac` and the other JDK tools go on `PATH`, and `JAVA_HOME`
-points at it. It can also cache what Maven or Gradle downloads.
+points at it. It can also cache what Maven, Gradle or Leiningen downloads.
 
 Use this function instead of the `circleci/maven` and `circleci/gradle` orbs.
 
@@ -174,17 +174,17 @@ new build, the next job downloads it.
 | `--jdk-file` | | JDK archive to install, with `--distribution jdkfile` |
 | `--make-default-jdk` | `true` | Make this JDK the one `java`, `javac` and `JAVA_HOME` resolve to. `false` installs it only for toolchains |
 | `--cache` | `true` | Restore the JDK from the job cache, and save it after a download |
-| `--cache-dependencies` | | Also cache what `maven` or `gradle` downloads. See [Caching dependencies](#caching-dependencies) |
+| `--cache-dependencies` | | Also cache what `maven`, `gradle` or `lein` downloads. See [Caching dependencies](#caching-dependencies) |
 | `--cache-dependency-path` | | Build files to key the dependency cache on, instead of the build tool's own |
 | `--cache-path` | | Folders to cache instead of the build tool's own |
 | `--cache-read-only` | `false` | Restore the dependency cache, but do not save it |
 
 ## Caching dependencies
 
-`--cache-dependencies maven` or `--cache-dependencies gradle` caches what the
-build tool downloads. setup-java restores the cache when it runs, and saves it
-at the end of the job if the job succeeds, so a failed build never saves a
-half-finished download.
+`--cache-dependencies maven`, `--cache-dependencies gradle` or
+`--cache-dependencies lein` caches what the build tool downloads. setup-java
+restores the cache when it runs, and saves it at the end of the job if the job
+succeeds, so a failed build never saves a half-finished download.
 
 | Build tool | Folders cached | Key built from |
 |------------|----------------|----------------|
@@ -192,6 +192,7 @@ half-finished download.
 | | `~/.m2/wrapper/dists` | `**/.mvn/wrapper/maven-wrapper.properties` |
 | `gradle` | `~/.gradle/caches` | `**/*.gradle*`, `**/gradle.properties`, `**/gradle-wrapper.properties`, `gradle/*.versions.toml`, `**/versions.properties`, `buildSrc/**/Versions.kt`, `buildSrc/**/Dependencies.kt` |
 | | `~/.gradle/wrapper` | `**/gradle-wrapper.properties` |
+| `lein` | `~/.m2/repository` | `**/project.clj`, `**/profiles.clj` |
 
 The build files are found under the step's working directory, so run the step
 in the project's directory. The key is a hash of their names and contents, so
@@ -203,6 +204,10 @@ with no build files at all fails the step.
 
 Gradle's folders follow `$GRADLE_USER_HOME` when it is set.
 
+Leiningen downloads into Maven's local repository, so `lein` caches the same
+folder as `maven`, keyed on `project.clj` instead. setup-java does not install
+Leiningen itself.
+
 | Flag | What it does |
 |------|--------------|
 | `--cache-dependency-path` | Build files to key the cache on, as globs relative to the working directory, e.g. `backend/**/pom.xml`. Separate several with commas |
@@ -213,7 +218,8 @@ Gradle's folders follow `$GRADLE_USER_HOME` when it is set.
 
 On an image that already has Java, such as `cimg/openjdk`, the
 `cache-dependencies` command caches without installing anything. It takes
-`--build-tool maven` or `--build-tool gradle`, and the three flags above.
+`--build-tool maven`, `--build-tool gradle` or `--build-tool lein`, and the
+three flags above.
 
 ```yaml
 functions:
@@ -235,6 +241,22 @@ Without the `functions:` block:
 
 ```yaml
 - run: circleci run github.com/circleci-functions/setup-java@<version> -- cache-dependencies --build-tool gradle
+```
+
+A Leiningen project works the same way, on an image that has Leiningen, such
+as `cimg/clojure`:
+
+```yaml
+jobs:
+  test:
+    docker:
+      - image: cimg/clojure:1.12.6-openjdk-21.0
+    steps:
+      - checkout
+      - setup-java/cache-dependencies:
+          with:
+            build-tool: lein
+      - run: lein test
 ```
 
 ## Platform support
