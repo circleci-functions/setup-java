@@ -46,7 +46,10 @@ func TestPlan_Maven(t *testing.T) {
 	main, wrapper := entries[0], entries[1]
 	assert.Equal(t, main.Label, "Maven dependencies")
 	assert.Assert(t, strings.HasPrefix(main.Key, "setup-java-v1-maven-linux-amd64-"), main.Key)
-	assert.DeepEqual(t, main.RestoreKeys, []string{main.Key, "setup-java-v1-maven-linux-amd64-"})
+	assert.Equal(t, len(main.RestoreKeys), 2)
+	assert.Equal(t, main.RestoreKeys[0], main.Key)
+	assert.Assert(t, strings.HasPrefix(main.RestoreKeys[1], "setup-java-v1-maven-linux-amd64-"), main.RestoreKeys[1])
+	assert.Assert(t, strings.HasPrefix(main.Key, main.RestoreKeys[1]), "the fallback is a prefix of the key")
 	assert.DeepEqual(t, main.Paths, []string{filepath.Join(home, ".m2", "repository")})
 	assert.Assert(t, strings.HasPrefix(wrapper.Key, "setup-java-v1-maven-wrapper-linux-amd64-"), wrapper.Key)
 	assert.DeepEqual(t, wrapper.Paths, []string{filepath.Join(home, ".m2", "wrapper", "dists")})
@@ -115,7 +118,7 @@ func TestPlan_Overrides(t *testing.T) {
 
 func TestPlan_Nonce(t *testing.T) {
 	entries := plan(t, "maven", Options{ProjectDir: writeProject(t, map[string]string{"pom.xml": ""}), Nonce: "run1"})
-	assert.Equal(t, entries[0].RestoreKeys[1], "setup-java-v1-maven-linux-amd64-run1-", "the fallback stays inside the nonce")
+	assert.Assert(t, strings.HasSuffix(entries[0].RestoreKeys[1], "-run1-"), "the fallback stays inside the nonce: %s", entries[0].RestoreKeys[1])
 }
 
 func TestPlan_NoBuildFiles(t *testing.T) {

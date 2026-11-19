@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -22,7 +23,8 @@ import (
 type Options struct {
 	// ProjectDir is where the build files are found.
 	ProjectDir string
-	// Files replaces the main cache's build file patterns.
+	// Files replaces the main cache's build file patterns. They may start with
+	// ./, or be absolute paths under ProjectDir.
 	Files []string
 	// Dirs replaces the main cache's folders. A leading ~ is the home
 	// directory; a relative folder is relative to ProjectDir.
@@ -59,6 +61,10 @@ func Plan(t Tool, opts Options) ([]Entry, error) {
 	if err != nil {
 		return nil, err
 	}
+	userPatterns, err := projectPatterns(opts.Files, opts.ProjectDir)
+	if err != nil {
+		return nil, err
+	}
 
 	var entries []Entry
 	for i, c := range t.Caches {
@@ -66,8 +72,8 @@ func Plan(t Tool, opts Options) ([]Entry, error) {
 		for j, d := range c.Dirs {
 			dirs[j] = filepath.Join(home, d)
 		}
-		if i == 0 && len(opts.Files) > 0 {
-			patterns = opts.Files
+		if i == 0 && len(userPatterns) > 0 {
+			patterns = userPatterns
 		}
 		if i == 0 && len(opts.Dirs) > 0 {
 			if dirs, err = resolveDirs(opts.Dirs, opts.ProjectDir); err != nil {
@@ -82,7 +88,10 @@ func Plan(t Tool, opts Options) ([]Entry, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%w for %s in %s: looked for %s", err, t.Name, opts.ProjectDir, strings.Join(patterns, ", "))
 		}
-		prefix := fmt.Sprintf("setup-java-v1-%s-%s-", c.ID, opts.Platform)
+		// A cache restores to the absolute paths it was saved from, so the
+		// prefix carries a hash of them: executors whose $HOME differs must not
+		// share a cache that restores where only one of them looks.
+		prefix := fmt.Sprintf("setup-java-v1-%s-%s-%s-", c.ID, opts.Platform, dirsHash(dirs))
 		if opts.Nonce != "" {
 			prefix += opts.Nonce + "-"
 		}
@@ -94,6 +103,51 @@ func Plan(t Tool, opts Options) ([]Entry, error) {
 		})
 	}
 	return entries, nil
+}
+
+// dirsHash returns a short hex hash of dirs, for a cache key.
+func dirsHash(dirs []string) string {
+	sum := sha256.Sum256([]byte(strings.Join(dirs, "\x00")))
+	return hex.EncodeToString(sum[:4])
+}
+
+// projectPatterns turns build file patterns into the slash-separated form,
+// relative to projectDir, that projectFiles lists files in: ./ is dropped, and
+// an absolute pattern is made relative to projectDir. A pattern outside
+// projectDir is an error, since no file it matches is listed.
+func projectPatterns(patterns []string, projectDir string) ([]string, error) {
+	out := make([]string, len(patterns))
+	for i, p := range patterns {
+		if filepath.IsAbs(p) {
+			rel, err := relativeTo(p, projectDir)
+			if err != nil {
+				return nil, err
+			}
+			p = rel
+		}
+		out[i] = path.Clean(filepath.ToSlash(p))
+	}
+	return out, nil
+}
+
+// relativeTo makes the absolute pattern p relative to dir. Symlinks in the
+// part of p before its first glob, and in dir, are resolved first, so that
+// /tmp/x and /private/tmp/x, the same directory on macOS, compare equal.
+func relativeTo(p, dir string) (string, error) {
+	base, rest := doublestar.SplitPattern(filepath.ToSlash(p))
+	rel, err := filepath.Rel(resolve(dir), resolve(filepath.FromSlash(base)))
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("--cache-dependency-path %s is not under the working directory %s", p, dir)
+	}
+	return path.Join(filepath.ToSlash(rel), rest), nil
+}
+
+// resolve returns p with its symlinks resolved, or p itself if it cannot be.
+func resolve(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return p
 }
 
 // projectFiles lists the files under dir, as slash-separated paths relative

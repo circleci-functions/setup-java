@@ -195,7 +195,10 @@ half-finished download.
 
 The build files are found under the step's working directory, so run the step
 in the project's directory. The key is a hash of their names and contents, so
-it changes when the dependencies do. When nothing is cached under the exact
+it changes when the dependencies do. It also carries a hash of the folders
+cached, since a cache restores to the paths it was saved from: jobs whose home
+directory differs, such as one image running as `root` and another as
+`circleci`, keep separate caches. When nothing is cached under the exact
 key yet, the newest cache for the same build tool is restored instead, and only
 what changed is downloaded. The wrapper is cached on its own, so it survives
 changes to the build files. A project with no wrapper skips that cache, but one
@@ -205,7 +208,7 @@ Gradle's folders follow `$GRADLE_USER_HOME` when it is set.
 
 | Flag | What it does |
 |------|--------------|
-| `--cache-dependency-path` | Build files to key the cache on, as globs relative to the working directory, e.g. `backend/**/pom.xml`. Separate several with commas |
+| `--cache-dependency-path` | Build files to key the cache on, as globs relative to the working directory, e.g. `backend/**/pom.xml` or `./backend/pom.xml`, or absolute paths under it. Separate several with commas |
 | `--cache-path` | Folders to cache instead of the defaults. `~` is the home directory |
 | `--cache-read-only` | Restore the cache, but do not save it |
 
