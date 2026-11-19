@@ -81,6 +81,19 @@ var tools = map[string]Tool{
 			},
 		},
 	},
+	// Leiningen downloads into Maven's local repository.
+	"lein": {
+		Name: "lein",
+		Home: inHome(".m2"),
+		Caches: []Cache{
+			{
+				ID:    "lein",
+				Label: "Leiningen dependencies",
+				Dirs:  []string{"repository"},
+				Files: []string{"**/project.clj", "**/profiles.clj"},
+			},
+		},
+	},
 }
 
 // Names returns the names of the supported build tools, sorted.

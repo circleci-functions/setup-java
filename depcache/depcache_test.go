@@ -94,6 +94,21 @@ func TestPlan_GradleUserHome(t *testing.T) {
 	assert.DeepEqual(t, entries[0].Paths, []string{filepath.Join(gradleHome, "caches")})
 }
 
+func TestPlan_Lein(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	files := map[string]string{"project.clj": "(defproject app \"0.1.0\")"}
+	entries := plan(t, "lein", Options{ProjectDir: writeProject(t, files)})
+	assert.Equal(t, len(entries), 1, "Leiningen has no wrapper to cache")
+	assert.Equal(t, entries[0].Label, "Leiningen dependencies")
+	assert.Assert(t, strings.HasPrefix(entries[0].Key, "setup-java-v1-lein-linux-amd64-"), entries[0].Key)
+	assert.DeepEqual(t, entries[0].Paths, []string{filepath.Join(home, ".m2", "repository")})
+
+	files["profiles.clj"] = "{:dev {:dependencies []}}"
+	assert.Assert(t, plan(t, "lein", Options{ProjectDir: writeProject(t, files)})[0].Key != entries[0].Key, "profiles.clj can add dependencies")
+}
+
 func TestPlan_Overrides(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -127,5 +142,5 @@ func TestPlan_NoBuildFiles(t *testing.T) {
 }
 
 func TestNames(t *testing.T) {
-	assert.DeepEqual(t, Names(), []string{"gradle", "maven"})
+	assert.DeepEqual(t, Names(), []string{"gradle", "lein", "maven"})
 }
