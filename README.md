@@ -24,12 +24,6 @@ jobs:
       - run: ./mvnw verify
 ```
 
-Where the `functions:` block is not available, run it as a step instead:
-
-```yaml
-- run: circleci run github.com/circleci-functions/setup-java@<version> -- --distribution temurin --java-version 21
-```
-
 ## Installing a JDK
 
 setup-java looks up the newest build that matches the version you ask for,
@@ -238,12 +232,6 @@ jobs:
           with:
             build-tool: gradle
       - run: ./gradlew build
-```
-
-Without the `functions:` block:
-
-```yaml
-- run: circleci run github.com/circleci-functions/setup-java@<version> -- cache-dependencies --build-tool gradle
 ```
 
 A Leiningen project works the same way, on an image that has Leiningen, such
